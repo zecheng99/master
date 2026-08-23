@@ -9,3 +9,6 @@ launchd/
 # 云同步服务端不推公开仓库：Worker 地址和 D1 id 不该公开
 # （密钥另有 sync-worker/.gitignore 挡着 .dev.vars）
 aside/sync-worker/
+
+# 本地 VS Code 配置：settings.json 里是这台机器的 anaconda 绝对路径，换机器无效
+.vscode/
