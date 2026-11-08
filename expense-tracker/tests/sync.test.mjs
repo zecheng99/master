@@ -8,8 +8,7 @@ import { webcrypto } from 'node:crypto';
 const root = new URL('../', import.meta.url);
 const core = readFileSync(new URL('sync-core.js', root), 'utf8');
 const client = readFileSync(new URL('cloud-sync.js', root), 'utf8');
-const workerSource = readFileSync(new URL('sync-worker/src/index.js', root), 'utf8');
-const { default: worker, validEntries } = await import('data:text/javascript;base64,' + Buffer.from(workerSource).toString('base64'));
+const { default: worker, validEntries, settleSubscriptions } = await import(new URL('sync-worker/src/index.js', root));
 const key = 'a-test-only-sync-key-with-more-than-24-characters';
 const record = id => ({ id, date: '2026-11-08', largeCat: 'B-食', smallCat: '饮食', amount: 20 });
 function backend() {
@@ -142,6 +141,54 @@ test('changes made during upload remain pending and upload on next sync', async 
   };
   await a.sync(); assert.equal(a.records().length, 2);
   await a.sync(); const b = device(env); await b.sync(); assert.equal(b.records().length, 2);
+});
+
+test('subscription creation returns due bills immediately and both devices converge', async () => {
+  const env = backend(), a = device(env), b = device(env);
+  const month = globalThis.SpendexSubscriptions.today().slice(0, 7);
+  const subscription = { id: 333, name: '云存储', amount: 18, day: 1, startMonth: month, nextMonth: month, largeCat: 'Z-其他', smallCat: '订阅', status: 'active' };
+  a.write('expense_subscriptions', [subscription]); await a.sync();
+  assert.equal(a.records().length, 1);
+  assert.equal(a.records()[0].pending, true);
+  await b.sync();
+  assert.deepEqual(b.records(), a.records());
+  assert.equal(JSON.parse(b.data.get('expense_subscriptions'))[0].id, 333);
+  await Promise.all([a.sync(), b.sync(), settleSubscriptions(env)]);
+  assert.equal(a.records().length, 1);
+  const records = a.records(); records[0].pending = false;
+  a.write('expense_records', records); await a.sync(); await b.sync();
+  assert.equal(b.records()[0].pending, false);
+  const settings = JSON.parse(a.data.get('expense_subscriptions')); settings[0].status = 'paused';
+  a.write('expense_subscriptions', settings); await a.sync();
+  const future = new Date(); future.setUTCFullYear(future.getUTCFullYear() + 1);
+  const settled = await settleSubscriptions(env, future.getTime());
+  assert.equal(Object.keys(settled.entries).filter(key => key.startsWith('record:')).length, 1);
+});
+
+test('legacy subscription tombstones do not delete schedules on the server', async () => {
+  const env = backend();
+  const subscription = { id: 444, name: 'Future', amount: 10, day: 1, startMonth: '9999-01', nextMonth: '9999-01', largeCat: 'Z-其他', smallCat: '订阅', status: 'active' };
+  const a = device(env); a.write('expense_subscriptions', [subscription]); await a.sync();
+  const remote = await settleSubscriptions(env);
+  const incoming = { ...remote.entries, 'subscription:444': { value: null, stamp: '0000000000000000-seed' } };
+  const response = await worker.fetch(new Request('https://sync.example/sync', { method: 'PUT', headers: { Authorization: 'Bearer ' + key }, body: JSON.stringify({ revision: remote.revision, entries: incoming }) }), env);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).entries['subscription:444'].value.name, 'Future');
+});
+
+test('a cloud scheduler cursor cannot overwrite a concurrent pause', async () => {
+  const env = backend();
+  const month = globalThis.SpendexSubscriptions.today().slice(0, 7);
+  const subscription = { id: 555, name: 'Pause race', amount: 18, day: 1, startMonth: month, nextMonth: month, largeCat: 'Z-其他', smallCat: '订阅', status: 'active' };
+  const original = { 'subscription:555': { value: subscription, stamp: '0000000000000000-seed' } };
+  await env.DB.prepare('INSERT INTO sync_state (id, revision, entries) VALUES (1, 1, ?)').bind(JSON.stringify(original)).run();
+  const a = device(env, { expense_subscriptions: JSON.stringify([subscription]) });
+  a.write('expense_subscriptions', [{ ...subscription, status: 'paused' }]);
+  await a.sync();
+  const remote = await settleSubscriptions(env);
+  assert.equal(remote.entries['subscription:555'].value.status, 'paused');
+  assert.equal(JSON.parse(a.data.get('expense_subscriptions'))[0].status, 'paused');
+  assert.ok(remote.entries['subscription-state:555']);
 });
 
 test('worker rejects unauthorized, foreign origins, malformed data and stale revisions', async () => {

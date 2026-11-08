@@ -307,7 +307,7 @@ function renderTripRecorder(trip) {
     <p class="card-label">详情</p><div class="card">
       <div class="form-row"><label class="form-label" for="travel-date">日期</label><input class="form-input" type="date" id="travel-date" value="${esc(draft?.date || travelToday())}"></div>
       <div class="form-row travel-money-row"><label class="form-label" for="travel-amount">金额</label>
-        <input class="form-input money-input" type="text" id="travel-amount" placeholder="金额或算式" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="travel-amount-result" value="${esc(draft?.amount || '')}" oninput="updateTravelSubmit()" onkeydown="SpendexAmount.onKey(event,'travel-amount')">
+        <input class="form-input money-input" type="text" id="travel-amount" placeholder="0.00" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="travel-amount-result" value="${esc(draft?.amount || '')}" oninput="updateTravelSubmit()" onkeydown="SpendexAmount.onKey(event,'travel-amount')">
         <select class="travel-currency" id="travel-currency" aria-label="币种" onchange="selectTravelCurrency(${trip.id})">${Travel.currencies.map(item => `<option value="${item.code}"${item.code === code ? ' selected' : ''}>${item.code} ${item.name}</option>`).join('')}</select></div>
       <div class="amount-calculation" id="travel-amount-calculation" hidden><span id="travel-amount-result" role="status" aria-live="polite"></span><button type="button" id="travel-amount-use-result" onclick="SpendexAmount.useResult('travel-amount')" hidden>使用结果</button></div>
       <div class="form-row"><label class="form-label" for="travel-note">备注</label><input class="form-input" type="text" id="travel-note" placeholder="可选" value="${esc(draft?.note || '')}"></div>

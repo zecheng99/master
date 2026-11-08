@@ -2,7 +2,20 @@
 
 使用独立的 Cloudflare Worker 和 D1 数据库。原来的静态网页继续使用原网址，
 不需要迁移手机 PWA 的浏览器存储。日常账单、旅行信息、旅行中的每笔开销及
-每周餐饮预算都会同步。
+每周餐饮预算、订阅计划和订阅记账进度都会同步。
+
+「订阅」支持人民币月付项目，可设置开始月份、金额、分类和每月扣费日；月底没有
+对应日期时使用当月最后一天。到期生成待确认账单，确认后才计入支出和餐饮预算。
+可在明细里修改实际金额或确认扣款；修改订阅价格只影响之后生成的账单。
+暂停期间不生成新账单，恢复后从下一次适用的扣费日继续；取消后保留历史账单。
+
+Worker 每天 UTC 00:00（北京时间／新加坡时间 08:00）运行定时任务；同步请求也会
+补查到期记录，创建已到扣费日的订阅会立即返回待确认账单。自动生成需先把计划
+同步到云端，离线修改在联网同步后生效。订阅计划与服务器排程游标分开存储，避免
+后台记账覆盖改价或暂停。每个订阅／月份使用固定账单 ID；删除后保留墓碑，重复
+执行不会重新生成。旧 PWA 对未知字段的删除标记不会抹除订阅设置和排程进度。
+沿用现有 D1 表，不需要数据库迁移。日常 CSV 导出包含已生成的订阅账单；订阅
+计划本身通过云同步保存，不由日常 CSV 恢复。
 
 旅行页支持多个同时进行的行程，每个行程分别记住上次选择的币种。已有旅行账单
 没有币种字段时按人民币处理；每个行程首次选择尚未填写汇率的外币时提示输入，
@@ -44,7 +57,8 @@ npx wrangler deploy
 仓库，也不要在网页中填写 Cloudflare 账号密码或 API Token。
 
 还需要通过原有静态站点发布流程发布本次前端改动，保持原域名和路径，避免
-现有手机 PWA 因来源变化无法读取本地记录。此修改未自动执行 Git 提交或推送。
+现有手机 PWA 因来源变化无法读取本地记录。前端与 Worker 都需要发布；修改
+订阅逻辑时先更新 Worker，再发布前端。
 
 当前前端地址为 `https://zecheng99.github.io/master/expense-tracker/`。
 服务器默认允许 `https://zecheng99.github.io`、旧地址 `https://shelvee11.github.io`
@@ -102,6 +116,7 @@ PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs n
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/sync.browser.mjs
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/import.browser.mjs
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/amount.browser.mjs
+PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/subscription.browser.mjs
 ```
 
 默认 Chrome 路径适用于 macOS；可用 `CHROME_EXECUTABLE` 指定其他 Chrome 路径，
@@ -110,6 +125,8 @@ PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs n
 同步界面脚本验证只填密钥、旧配置兼容和断开后停止请求，使用拦截的测试接口。
 恢复脚本通过真实文件选择器验证 Excel CSV 解析、月份显示、重复恢复及读取失败提示。
 金额脚本验证日常与旅行计算、编辑、结果按钮、异常拦截、汇率、手机布局和离线计算。
+订阅脚本通过实际 Worker 与内存 D1 数据库验证双设备同步、模拟定时任务、暂停恢复、
+历史账单金额和确认后的统计，所有请求在隔离浏览器中拦截，不访问线上账单。
 
 部署后仍需实机验收：在电脑新增一笔，手机打开后检查；手机断网新增后恢复网络，
 再检查电脑；删除一笔后确认两端均消失。

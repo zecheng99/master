@@ -2,6 +2,10 @@ name = "spendex-sync"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 
+# Daily 08:00 in Singapore/China (UTC+8); sync requests also catch up due bills.
+[triggers]
+crons = ["0 0 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "spendex"

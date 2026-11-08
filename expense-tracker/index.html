@@ -134,7 +134,7 @@ main {
   padding: 12px 0;
 }
 .form-input::placeholder { color: var(--label3); }
-.form-input[type="number"], .money-input { font-size: 20px; font-weight: 600; color: var(--accent); }
+.form-input[type="number"] { font-size: 16px; font-weight: 400; color: var(--label); }
 .money-input { min-width: 0; }
 .amount-calculation { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--sep); font-size: 13px; color: var(--accent); }
 .amount-calculation[hidden], .amount-calculation button[hidden] { display: none; }
@@ -429,6 +429,27 @@ main {
 .rate-input-row { display: flex; align-items: center; gap: 8px; }
 .rate-error { margin-top: 10px; color: var(--red) !important; }
 .import-status { font-size: 13px; line-height: 1.6; color: var(--label2); white-space: pre-line; overflow-wrap: anywhere; }
+.subscription-overview { padding: 18px 16px; display: flex; flex-direction: column; gap: 8px; }
+.subscription-overview p, .subscription-overview span { font-size: 13px; color: var(--label2); }
+.subscription-overview strong { color: var(--accent); font-size: 26px; }
+.subscription-help { color: var(--label2); font-size: 13px; line-height: 1.6; }
+.subscription-notice { padding: 12px 16px; font-size: 13px; line-height: 1.7; }
+.subscription-notice button { display: block; }
+.subscription-card { padding: 16px; }
+.subscription-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.subscription-heading h2 { font-size: 16px; overflow-wrap: anywhere; }
+.subscription-heading > span { font-size: 15px; white-space: nowrap; color: var(--accent); }
+.subscription-card p { font-size: 12px; color: var(--label2); line-height: 1.8; overflow-wrap: anywhere; }
+.subscription-card .subscription-pending { color: var(--orange); }
+.subscription-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.subscription-actions button, .record-confirm-btn { font: inherit; font-size: 12px; border: 1px solid var(--sep); border-radius: 7px; padding: 6px 10px; background: var(--fill); color: var(--accent); cursor: pointer; }
+.record-confirm-btn { flex-shrink: 0; padding: 5px; }
+.subscription-form { max-width: 360px; max-height: 85dvh; overflow-y: auto; }
+.subscription-form label { display: block; font-size: 13px; margin: 12px 0 6px; }
+.subscription-form input, .subscription-form select { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--sep); border-radius: 8px; font: inherit; font-size: 16px; font-weight: 400; color: var(--label); text-align: left; background: var(--bg2); }
+.subscription-form select + select { margin-top: 8px; }
+.subscription-form p { font-size: 12px; line-height: 1.6; margin-top: 12px; color: var(--label2); }
+.subscription-schedule { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
 .trip-summary-total {
   text-align: center; padding: 24px 16px; border-bottom: 1px solid var(--sep);
 }
@@ -460,6 +481,7 @@ main {
   <button class="tab-btn active" onclick="switchTab('record')">记一笔</button>
   <button class="tab-btn" onclick="switchTab('history')">明细</button>
   <button class="tab-btn" onclick="switchTab('travel')">旅行</button>
+  <button class="tab-btn" onclick="switchTab('subscription')">订阅</button>
 </div>
 
 <main>
@@ -479,7 +501,7 @@ main {
       </div>
       <div class="form-row">
         <label class="form-label" for="amount">金额</label>
-        <input class="form-input money-input" type="text" id="amount" placeholder="金额或算式" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="amount-result" onkeydown="SpendexAmount.onKey(event,'amount')">
+        <input class="form-input money-input" type="text" id="amount" placeholder="0.00" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="amount-result" onkeydown="SpendexAmount.onKey(event,'amount')">
       </div>
       <div class="amount-calculation" id="amount-calculation" hidden><span id="amount-result" role="status" aria-live="polite"></span><button type="button" id="amount-use-result" onclick="SpendexAmount.useResult('amount')" hidden>使用结果</button></div>
       <div class="form-row">
@@ -556,6 +578,7 @@ main {
 
   <!-- Travel Panel -->
   <div id="travel-panel" class="panel"></div>
+  <div id="subscription-panel" class="panel"></div>
 </main>
 
 <div class="toast" id="toast">已记录</div>
@@ -713,7 +736,7 @@ function initCatGrid() {
 function selectCat(code) {
   selectedCat = CATS.find(c => c.code === code);
   selectedSub = null;
-  document.querySelectorAll('.cat-btn').forEach((el, i) =>
+  document.querySelectorAll('#cat-grid .cat-btn').forEach((el, i) =>
     el.classList.toggle('selected', CATS[i].code === code));
   const subDiv = document.getElementById('sub-cats');
   if (selectedCat.subs.length === 1) {
@@ -745,7 +768,9 @@ function saveRecord() {
   if (!selectedCat || !selectedSub || !result.valid || result.value <= 0) return;
   const amt = result.value;
   const dtVal = document.getElementById('record-date').value;
+  const records = getRecords();
   const record = {
+    ...(editingId ? records.find(record => record.id === editingId) : {}),
     id:       editingId || newRecordId(),
     date:     dtVal,
     dateStr:  dtVal,
@@ -757,7 +782,6 @@ function saveRecord() {
     ignored:  document.getElementById('ignored-check').checked,
     pending:  document.getElementById('pending-check').checked
   };
-  const records = getRecords();
   if (editingId) {
     const idx = records.findIndex(r => r.id === editingId);
     if (idx !== -1) records[idx] = record;
@@ -775,7 +799,7 @@ function resetForm() {
   document.getElementById('ignored-check').checked = false;
   document.getElementById('pending-check').checked = false;
   selectedCat = null; selectedSub = null; editingId = null;
-  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('#cat-grid .cat-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('sub-cats').classList.remove('show');
   document.getElementById('submit-btn').textContent = '记一笔';
   document.getElementById('cancel-btn').style.display = 'none';
@@ -848,7 +872,7 @@ function renderWeeklyFood(allRecords) {
   const week = getWeekRange();
   const budget = getFoodBudget();
   const spent = allRecords
-    .filter(r => r.largeCat === 'B-食' && !r.ignored && r.type !== '收入' && r.date >= week.start && r.date <= week.end)
+    .filter(r => r.largeCat === 'B-食' && countsTowardsTotals(r) && r.type !== '收入' && r.date >= week.start && r.date <= week.end)
     .reduce((s, r) => s + r.amount, 0);
 
   const pct = Math.min(spent / budget * 100, 100);
@@ -890,6 +914,10 @@ function setFilter(f) {
   renderHistory();
 }
 
+function countsTowardsTotals(record) {
+  return !record.ignored && !(record.subscriptionId && record.pending);
+}
+
 function renderHistory() {
   document.getElementById('month-label').textContent = viewMonth;
 
@@ -916,14 +944,14 @@ function renderHistory() {
   }
 
   if (catFilter && activeFilter === 'all') {
-    displayRecords = displayRecords.filter(r => r.largeCat === catFilter && r.type !== '收入' && !r.ignored);
+    displayRecords = displayRecords.filter(r => r.largeCat === catFilter && r.type !== '收入' && countsTowardsTotals(r));
   } else if (catFilter) {
     catFilter = null;
   }
 
   const all = monthRecords.slice().sort((a,b) => b.id - a.id);
-  const incRecs = all.filter(r => r.type === '收入' && !r.ignored);
-  const expRecs = all.filter(r => r.type !== '收入' && !r.ignored);
+  const incRecs = all.filter(r => r.type === '收入' && countsTowardsTotals(r));
+  const expRecs = all.filter(r => r.type !== '收入' && countsTowardsTotals(r));
   const totalInc = incRecs.reduce((s,r) => s+r.amount, 0);
   const totalExp = expRecs.reduce((s,r) => s+r.amount, 0);
   const net = totalInc - totalExp;
@@ -988,6 +1016,7 @@ function renderHistory() {
       </div>
       <div class="record-right">
         <div class="record-amt${r.type==='收入'?' income':''}">${r.type==='收入'?'+':'-'}¥${r.amount.toFixed(2)}</div>
+        ${r.pending && r.subscriptionId ? `<button class="record-confirm-btn" onclick="confirmSubscriptionCharge(${r.id})">确认扣款</button>` : ''}
       </div>
       <button class="record-edit-btn" onclick="editRecord(${r.id})">✏️</button>
       <button class="record-del-btn"  onclick="delRecord(${r.id})">×</button>
@@ -1060,7 +1089,7 @@ function exportAllCSV() {
 
 function switchTab(tab) {
   if (typeof preserveTravelDraft === 'function') preserveTravelDraft();
-  const tabs = ['record', 'history', 'travel'];
+  const tabs = ['record', 'history', 'travel', 'subscription'];
   document.querySelectorAll('.tab-btn').forEach((b, i) =>
     b.classList.toggle('active', tabs[i] === tab));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -1077,6 +1106,9 @@ function switchTab(tab) {
   } else if (tab === 'travel') {
     document.getElementById('travel-panel').classList.add('active');
     renderTravel();
+  } else if (tab === 'subscription') {
+    document.getElementById('subscription-panel').classList.add('active');
+    renderSubscriptions();
   }
 }
 
@@ -1105,6 +1137,8 @@ init();
 </script>
 <script src="travel-core.js"></script>
 <script src="travel.js"></script>
+<script src="subscription-core.js"></script>
+<script src="subscriptions.js"></script>
 <script src="sync-core.js"></script>
 <script src="cloud-sync.js"></script>
 </body>

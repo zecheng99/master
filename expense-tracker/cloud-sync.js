@@ -11,7 +11,7 @@
     const saved = read(CONFIG, {});
     return { ...saved, url: saved.url || DEFAULT_SYNC_URL };
   };
-  const current = () => flatten(getRecords(), getTrips(), localStorage.getItem('weekly_food_budget'));
+  const current = () => flatten(getRecords(), getTrips(), localStorage.getItem('weekly_food_budget'), read('expense_subscriptions', []));
   const saveEntries = value => localStorage.setItem(STATE, JSON.stringify(value));
   function stamp(all) {
     const previous = Object.values(all).reduce((n, e) => Math.max(n, Number(e.stamp.split('-')[0])), 0);
@@ -21,6 +21,7 @@
     const all = entries(), data = current();
     const version = stamp(all);
     for (const key of new Set([...Object.keys(all), ...Object.keys(data)])) {
+      if (key.startsWith('subscription-state:')) continue; // Server-owned scheduling cursor.
       const value = data[key] ?? null;
       if (JSON.stringify(all[key]?.value ?? null) !== JSON.stringify(value)) {
         // Initial data on a newly connected device only seeds missing cloud entries.
@@ -49,6 +50,8 @@
     saveEntries(all);
     localStorage.setItem('expense_records', JSON.stringify(data.records));
     localStorage.setItem('travel_trips', JSON.stringify(data.trips));
+    localStorage.setItem('expense_subscriptions', JSON.stringify(data.subscriptions));
+    localStorage.setItem('expense_subscription_states', JSON.stringify(data.subscriptionStates));
     if (data.budget !== null) localStorage.setItem('weekly_food_budget', data.budget);
     if (document.getElementById('history-panel').classList.contains('active')) renderHistory();
     const travel = document.getElementById('travel-panel');
@@ -56,6 +59,7 @@
       // Preserve the current trip's unfinished form while updating synced totals.
       refreshTravelAfterSync();
     }
+    if (document.getElementById('subscription-panel')?.classList.contains('active') && !document.querySelector('.modal-overlay')) renderSubscriptions();
   }
   async function request(url, key, options = {}) {
     const response = await fetch(url + '/sync', {
@@ -80,13 +84,14 @@
       for (let attempt = 0; attempt < 5; attempt++) {
         const remote = await request(cfg.url, cfg.key);
         if (runGeneration !== generation) return;
-        const combined = merge(remote.entries, entries());
+        let combined = merge(remote.entries, entries());
         if (JSON.stringify(combined) !== JSON.stringify(remote.entries)) {
           const result = await request(cfg.url, cfg.key, {
             method: 'PUT', body: JSON.stringify({ revision: remote.revision, entries: combined })
           });
           if (runGeneration !== generation) return;
           if (!result) continue; // Another device committed first: pull and merge again.
+          if (result.entries) combined = merge(combined, result.entries);
         }
         const latest = entries();
         apply(merge(combined, latest));
@@ -108,7 +113,7 @@
     overlay.className = 'modal-overlay'; overlay.id = 'sync-modal';
     overlay.innerHTML = `<div class="modal-box sync-box">
       <h3>Cloudflare 云同步</h3>
-      <p>云端地址已配置。电脑和手机填写相同的同步密钥即可连接。日常账单、旅行和每周预算会自动同步，离线也能记账。</p>
+      <p>云端地址已配置。电脑和手机填写相同的同步密钥即可连接。账单、旅行、订阅和每周预算会自动同步，离线也能记账。</p>
       <label for="sync-key">同步密钥</label><input id="sync-key" type="password" placeholder="部署时设置的密钥" autocomplete="off">
       <p>此处填写专用同步密钥，不是 Cloudflare 密码或 API Token。首次连接会合并已有记录；同一笔记录的冲突使用最后修改版本。</p>
       <p id="sync-status" role="status" aria-live="polite"></p>
