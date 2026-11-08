@@ -423,6 +423,7 @@ main {
 .rate-label { display: block; font-size: 13px; margin-top: 16px; margin-bottom: 6px; }
 .rate-input-row { display: flex; align-items: center; gap: 8px; }
 .rate-error { margin-top: 10px; color: var(--red) !important; }
+.import-status { font-size: 13px; line-height: 1.6; color: var(--label2); white-space: pre-line; overflow-wrap: anywhere; }
 .trip-summary-total {
   text-align: center; padding: 24px 16px; border-bottom: 1px solid var(--sep);
 }
@@ -541,6 +542,7 @@ main {
       </div>
     </div>
 
+    <p class="import-status" id="import-status" role="status" aria-live="polite" hidden></p>
     <p class="card-label" id="records-label">记录</p>
     <div class="card" id="records-card"></div>
 
@@ -552,6 +554,7 @@ main {
 
 <div class="toast" id="toast">已记录</div>
 
+<script src="expense-csv.js"></script>
 <script>
 const CATS = [
   {code:"A-衣", icon:"👔", subs:["衣物","护肤品","彩妆"]},
@@ -585,7 +588,7 @@ function newRecordId() {
 // ── Storage ──────────────────────────────────────────────────
 
 function getRecords() {
-  try { return JSON.parse(localStorage.getItem('expense_records') || '[]'); }
+  try { return SpendexCSV.normalizeRecords(JSON.parse(localStorage.getItem('expense_records') || '[]')); }
   catch { return []; }
 }
 function saveRecords(records) {
@@ -605,14 +608,34 @@ function importCSV() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.csv,text/csv';
-  input.onchange = () => {
+  input.hidden = true;
+  document.body.appendChild(input);
+  input.oncancel = () => input.remove();
+  input.onchange = async () => {
     const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => parseAndImportCSV(reader.result);
-    reader.readAsText(file);
+    try {
+      if (!file) return;
+      if (/\.xlsx?$/i.test(file.name)) throw new Error('请选择 CSV 文件；Excel 工作簿需要先另存为「CSV UTF-8」');
+      setImportStatus('正在读取：' + file.name);
+      const text = SpendexCSV.decode(await file.arrayBuffer());
+      parseAndImportCSV(text);
+    } catch (error) {
+      const message = '恢复失败：' + (error.message || '无法读取文件，请先将文件下载到本机后重试');
+      setImportStatus(message, true);
+      alert(message);
+    } finally { input.remove(); }
   };
   input.click();
+}
+function setImportStatus(message, failed = false) {
+  const status = document.getElementById('import-status');
+  status.hidden = false;
+  status.style.color = failed ? 'var(--red)' : 'var(--label2)';
+  status.textContent = message;
+}
+function showImportedMonth(records) {
+  if (records.length) viewMonth = records.map(record => record.date.slice(0, 7)).sort().at(-1);
+  setFilter('all');
 }
 
 // 备份里的设置：本地没有就恢复，本地已有就先问过再覆盖
@@ -628,61 +651,40 @@ function restoreSettings(settings) {
       if (!confirm(`备份里的每周饮食预算是 ¥${n}，当前是 ¥${stored}。要改用备份里的吗？`)) continue;
     }
     localStorage.setItem('weekly_food_budget', n);
-  window.CloudSync?.changed();
+    window.CloudSync?.changed();
     changed = true;
   }
   return changed;
 }
 
 function parseAndImportCSV(text) {
-  const lines = text.replace(/^﻿/, '').trim().split('\n');
-  if (lines.length < 2) { alert('CSV 文件为空'); return; }
-
-  // 备份文件开头可能有 #设置 行（如每周饮食预算），先吃掉再找表头
-  let headerIdx = 0;
-  const settings = [];
-  while (headerIdx < lines.length && lines[headerIdx].trim().startsWith('#')) {
-    settings.push(lines[headerIdx].split(','));
-    headerIdx++;
+  let parsed;
+  try { parsed = SpendexCSV.parse(text); }
+  catch (error) { setImportStatus(error.message, true); alert(error.message); return; }
+  const detail = parsed.skipped.slice(0, 3).map(item => `第 ${item.row} 条：${item.reason}`).join('\n');
+  if (!parsed.records.length) {
+    const message = '未找到有效记录。' + (detail ? '\n' + detail : '请检查文件是否包含账单数据。');
+    setImportStatus(message, true); alert(message); return;
   }
-  const settingsChanged = restoreSettings(settings);
-  if (settingsChanged) renderHistory();
-
-  const incoming = [];
-  const header = lines[headerIdx].split(',');
-  const ignoredIdx = header.indexOf('忽略');
-  const pendingIdx = header.indexOf('待确认');
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const cols = lines[i].split(',');
-    if (cols.length < 5) continue;
-    const [dateStr, type, largeCat, smallCat, amount] = cols;
-    const note = (cols[5] || '').trim();
-    const amt = parseFloat(amount);
-    if (!dateStr || isNaN(amt)) continue;
-    const rec = {
-      id: newRecordId(),
-      date: dateStr.trim(),
-      dateStr: dateStr.trim(),
-      largeCat: largeCat.trim(),
-      smallCat: smallCat.trim(),
-      type: type.trim() || '支出',
-      amount: amt,
-      note: note
-    };
-    if (ignoredIdx >= 0 && cols[ignoredIdx] === '1') rec.ignored = true;
-    if (pendingIdx >= 0 && cols[pendingIdx] === '1') rec.pending = true;
-    incoming.push(rec);
-  }
-  if (!incoming.length) { alert('未找到有效记录'); return; }
   const existing = getRecords();
-  const existSet = new Set(existing.map(r => `${r.date}_${r.largeCat}_${r.smallCat}_${r.amount}`));
-  const newRecs = incoming.filter(r => !existSet.has(`${r.date}_${r.largeCat}_${r.smallCat}_${r.amount}`));
-  if (!newRecs.length) { alert('所有记录已存在，无需导入。'); return; }
-  if (!confirm(`发现 ${newRecs.length} 条新记录，合并到现有 ${existing.length} 条中？`)) return;
+  const newRecs = SpendexCSV.additions(existing, parsed.records).map(record => ({ ...record, id: newRecordId() }));
+  if (!newRecs.length) {
+    restoreSettings(parsed.settings);
+    showImportedMonth(parsed.records);
+    const message = `所有 ${parsed.records.length} 条有效记录已存在，无需重复导入。当前显示 ${viewMonth}。` +
+      (parsed.skipped.length ? `\n另有 ${parsed.skipped.length} 条无效记录被跳过。\n${detail}` : '');
+    setImportStatus(message); alert(message); return;
+  }
+  const skipped = parsed.skipped.length ? `\n有 ${parsed.skipped.length} 条无效记录将被跳过。\n${detail}` : '';
+  if (!confirm(`发现 ${newRecs.length} 条新记录，合并到现有 ${existing.length} 条中？${skipped}`)) {
+    setImportStatus('已取消恢复，未导入记录或更改预算。'); return;
+  }
   const merged = [...existing, ...newRecs].sort((a, b) => a.id - b.id);
   saveRecords(merged);
-  renderHistory();
-  alert(`已导入 ${newRecs.length} 条记录！当前共 ${merged.length} 条。`);
+  restoreSettings(parsed.settings);
+  showImportedMonth(newRecs);
+  const message = `已导入 ${newRecs.length} 条，已有 ${parsed.records.length - newRecs.length} 条，跳过 ${parsed.skipped.length} 条。当前显示 ${viewMonth}，共 ${merged.length} 条记录。`;
+  setImportStatus(message); alert(message);
 }
 
 // ── Record Panel ──────────────────────────────────────────────
@@ -1015,11 +1017,7 @@ function delRecord(id) {
 // ── Export ────────────────────────────────────────────────────
 
 function buildCSV(records) {
-  const rows = records.sort((a,b)=>a.id-b.id).map(r =>
-    `${r.dateStr},${r.type||'支出'},${r.largeCat},${r.smallCat},${r.amount},${(r.note||'').replace(/,/g,'，')},${r.ignored?'1':''},${r.pending?'1':''}`
-  );
-  return `#设置,每周饮食预算,${getFoodBudget()}\n`
-    + '日期,类型,大类,小类,金额,备注,忽略,待确认\n' + rows.join('\n') + '\n';
+  return SpendexCSV.build(records, getFoodBudget());
 }
 
 function triggerDownload(csv, filename) {

@@ -11,6 +11,12 @@
 没有汇率的外币仍标为待折算，避免混合金额被误计为人民币。
 旅行 CSV 包含原币、汇率与人民币折算金额，仍兼容以前的人民币 CSV。
 
+「明细 → 恢复数据」导入日常账单 CSV，支持 Excel 导出的 UTF-8、带 BOM 的 UTF-16
+及 GBK 编码，以及逗号、分号或制表符分隔。表头需包含日期、大类、小类、金额，
+类型和备注可选，列的顺序可调整。支持 Excel 的年月日写法和数字日期，导入后自动
+切换到有新记录的月份；无法识别的记录会显示跳过原因。Excel 工作簿需要先另存为
+CSV；旅行 CSV 在对应行程中导入。重新导入同一文件不会重复添加相同记录。
+
 ## 部署
 
 在此目录执行，需要 Node.js 与可用的 Cloudflare 登录：
@@ -89,12 +95,14 @@ node --test tests/*.test.mjs
 npm install --prefix /tmp/spendex-browser-check --no-save playwright
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/travel.browser.mjs
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/sync.browser.mjs
+PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/import.browser.mjs
 ```
 
 默认 Chrome 路径适用于 macOS；可用 `CHROME_EXECUTABLE` 指定其他 Chrome 路径，
 `TEST_BASE_URL` 指定本地测试网址。脚本在隔离浏览器环境中操作虚构账单，覆盖完整
 多行程流程、草稿保留、汇率弹窗、手机布局和离线重开，不使用线上密钥或账单。
 同步界面脚本验证只填密钥、旧配置兼容和断开后停止请求，使用拦截的测试接口。
+恢复脚本通过真实文件选择器验证 Excel CSV 解析、月份显示、重复恢复及读取失败提示。
 
 部署后仍需实机验收：在电脑新增一笔，手机打开后检查；手机断网新增后恢复网络，
 再检查电脑；删除一笔后确认两端均消失。
