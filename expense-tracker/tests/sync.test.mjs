@@ -87,6 +87,27 @@ test('new device seeds do not overwrite cloud edits or weekly budget', async () 
   assert.equal(b.data.get('weekly_food_budget'), '500');
 });
 
+test('multiple active trips sync currencies, remembered selection, and settlement rates', async () => {
+  const env = backend(), a = device(env);
+  const trips = [
+    { id: 100, name: '日本', status: 'active', lastCurrency: 'JPY', rates: { JPY: .05 }, records: [
+      { id: 101, date: '2026-11-08', category: '出行', amount: 2500 },
+      { id: 102, date: '2026-11-08', category: '餐饮', amount: 2000, currency: 'JPY' }
+    ] },
+    { id: 200, name: '新加坡', status: 'active', lastCurrency: 'SGD', rates: {}, records: [] }
+  ];
+  a.write('travel_trips', trips); await a.sync();
+  const b = device(env); await b.sync();
+  assert.deepEqual(b.trips(), trips);
+  const changed = b.trips();
+  changed[0].status = 'archived'; changed[0].rates.JPY = .048;
+  b.write('travel_trips', changed); await b.sync(); await a.sync();
+  assert.equal(a.trips()[0].rates.JPY, .048);
+  assert.equal(a.trips()[0].status, 'archived');
+  assert.equal(a.trips()[1].status, 'active');
+  assert.equal(a.trips()[1].lastCurrency, 'SGD');
+});
+
 test('changes made during upload remain pending and upload on next sync', async () => {
   const env = backend(), a = device(env);
   a.write('expense_records', [record(1)]);
@@ -110,14 +131,24 @@ test('worker rejects unauthorized, foreign origins, malformed data and stale rev
   }), env);
   assert.equal((await call('GET', undefined, { Authorization: 'wrong' })).status, 401);
   assert.equal((await call('GET', undefined, { Origin: 'https://evil.example' })).status, 403);
-  const preflight = await call('OPTIONS', undefined, { Origin: 'https://shelvee11.github.io' });
-  assert.equal(preflight.status, 204); assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), 'https://shelvee11.github.io');
+  for (const origin of ['https://zecheng99.github.io', 'https://shelvee11.github.io']) {
+    const preflight = await call('OPTIONS', undefined, { Origin: origin });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), origin);
+    const response = await call('GET', undefined, { Origin: origin });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+  }
   assert.equal((await call('PUT', { revision: 0, entries: { bad: {} } })).status, 400);
   assert.equal((await call('PUT', { revision: 0, entries: {} })).status, 200);
   assert.equal((await call('PUT', { revision: 0, entries: {} })).status, 409);
   assert.equal((await call('PUT', { revision: 1, entries: {} })).status, 200);
   assert.equal((await call('GET')).headers.get('Cache-Control'), 'no-store');
   assert.equal(validEntries({ budget: { value: -1, stamp: '0000000000000000-seed' } }), false);
+  const stamp = '0000000000000000-seed';
+  assert.equal(validEntries({ 'trip:1': { stamp, value: { id: 1, name: 'Test', status: 'active', rates: { JPY: -1 } } } }), false);
+  assert.equal(validEntries({ 'trip:1': { stamp, value: { id: 1, name: 'Test', status: 'active', lastCurrency: 'INVALID' } } }), false);
+  assert.equal(validEntries({ 'travel:1:2': { stamp, value: { id: 2, date: '2026-11-08', category: '餐饮', amount: 10, currency: 'INVALID' } } }), false);
   assert.equal((await call('PUT', { revision: 2, entries: {} }, { 'Content-Length': String(5 * 1024 * 1024) })).status, 413);
 });
 

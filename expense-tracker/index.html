@@ -393,12 +393,36 @@ main {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px; border-bottom: 1px solid var(--sep);
   cursor: pointer; transition: background 0.1s;
+  width: 100%; background: var(--bg2); border: 0; border-bottom: 1px solid var(--sep);
+  text-align: left; font: inherit; color: inherit; gap: 12px;
 }
 .trip-list-item:active { background: var(--fill); }
 .trip-list-item:last-child { border-bottom: none; }
 .trip-list-item .trip-name { font-size: 15px; font-weight: 500; }
 .trip-list-item .trip-info { font-size: 12px; color: var(--label3); margin-top: 2px; }
 .trip-list-item .trip-amt { font-size: 16px; font-weight: 600; color: var(--orange); }
+.trip-list-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.trip-list-copy .trip-name { overflow-wrap: anywhere; }
+.trip-list-aside { display: flex; align-items: center; gap: 8px; max-width: 42%; flex-shrink: 0; text-align: right; }
+.trip-list-aside .trip-amt { font-size: 13px; }
+.trip-back { border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; text-align: left; cursor: pointer; padding: 4px 0; }
+.currency-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.currency-chip { display: inline-block; background: var(--fill); padding: 4px 8px; border-radius: 7px; font-size: 12px; color: var(--label2); }
+.trip-summary-total .currency-chips { justify-content: center; }
+.travel-money-row { gap: 8px; }
+.travel-money-row .form-input { width: 0; min-width: 50px; }
+.travel-currency { max-width: 44%; min-width: 115px; font: inherit; font-size: 13px; padding: 8px 4px; color: var(--accent); background: var(--fill); border: 1px solid var(--sep); border-radius: 8px; }
+.travel-help { font-size: 12px; line-height: 1.5; color: var(--label2); padding: 10px 16px; }
+.trip-summary-meta { padding: 8px 16px; font-size: 12px; color: var(--label2); text-align: center; border-bottom: 1px solid var(--sep); }
+.category-totals { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.rate-summary { padding: 14px 16px; font-size: 13px; }
+.rate-summary-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rate-summary p { color: var(--label2); line-height: 1.7; }
+.trip-rates-box { max-height: 85dvh; overflow-y: auto; max-width: 360px; }
+.trip-rates-box p { font-size: 13px; line-height: 1.6; color: var(--label2); }
+.rate-label { display: block; font-size: 13px; margin-top: 16px; margin-bottom: 6px; }
+.rate-input-row { display: flex; align-items: center; gap: 8px; }
+.rate-error { margin-top: 10px; color: var(--red) !important; }
 .trip-summary-total {
   text-align: center; padding: 24px 16px; border-bottom: 1px solid var(--sep);
 }
@@ -1029,6 +1053,7 @@ function exportAllCSV() {
 // ── Tab Switch ────────────────────────────────────────────────
 
 function switchTab(tab) {
+  if (typeof preserveTravelDraft === 'function') preserveTravelDraft();
   const tabs = ['record', 'history', 'travel'];
   document.querySelectorAll('.tab-btn').forEach((b, i) =>
     b.classList.toggle('active', tabs[i] === tab));
@@ -1047,386 +1072,6 @@ function switchTab(tab) {
     document.getElementById('travel-panel').classList.add('active');
     renderTravel();
   }
-}
-
-// ── Travel ───────────────────────────────────────────────────
-
-const TRAVEL_CATS = [
-  { name: "住宿", icon: "🏨" },
-  { name: "出行", icon: "🚃" },
-  { name: "餐饮", icon: "🍱" },
-  { name: "门票", icon: "🎫" },
-  { name: "购物", icon: "🛍️" },
-  { name: "其他", icon: "📦" },
-];
-
-let selectedTravelCat = null;
-let viewingTripId = null;
-
-function getTrips() {
-  try { return JSON.parse(localStorage.getItem('travel_trips') || '[]'); }
-  catch { return []; }
-}
-function saveTrips(trips) {
-  localStorage.setItem('travel_trips', JSON.stringify(trips));
-  window.CloudSync?.changed();
-}
-function getActiveTrip() {
-  return getTrips().find(t => t.status === 'active') || null;
-}
-
-function createTrip() {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-box">
-    <h3>新建行程</h3>
-    <input type="text" id="trip-name-input" placeholder="如：大阪之旅" maxlength="20">
-    <div class="modal-btns">
-      <button class="modal-cancel" onclick="this.closest('.modal-overlay').remove()">取消</button>
-      <button class="modal-confirm" onclick="confirmCreateTrip()">创建</button>
-    </div>
-  </div>`;
-  document.body.appendChild(overlay);
-  document.getElementById('trip-name-input').focus();
-}
-
-function confirmCreateTrip() {
-  const name = document.getElementById('trip-name-input').value.trim();
-  document.querySelector('.modal-overlay').remove();
-  if (!name) return;
-  const trips = getTrips();
-  if (trips.some(t => t.status === 'active')) return;
-  const now = new Date();
-  const dateStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
-  trips.push({
-    id: newRecordId(),
-    name: name,
-    status: 'active',
-    createdAt: dateStr,
-    archivedAt: null,
-    records: []
-  });
-  saveTrips(trips);
-  renderTravel();
-}
-
-function endTrip(tripId) {
-  if (!confirm('结束这个行程？结束后仍可查看汇总。')) return;
-  const trips = getTrips();
-  const trip = trips.find(t => t.id === tripId);
-  if (!trip) return;
-  const now = new Date();
-  trip.status = 'archived';
-  trip.archivedAt = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
-  saveTrips(trips);
-  renderTravel();
-}
-
-function deleteTrip(tripId) {
-  if (!confirm('删除这个行程及其所有记录？')) return;
-  saveTrips(getTrips().filter(t => t.id !== tripId));
-  viewingTripId = null;
-  renderTravel();
-}
-
-function renameTripModal(tripId) {
-  const trip = getTrips().find(t => t.id === tripId);
-  if (!trip) return;
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-box">
-    <h3>修改行程名称</h3>
-    <input type="text" id="rename-trip-input" value="${esc(trip.name)}" maxlength="20">
-    <div class="modal-btns">
-      <button class="modal-cancel" onclick="this.closest('.modal-overlay').remove()">取消</button>
-      <button class="modal-confirm" onclick="confirmRenameTrip(${tripId})">确定</button>
-    </div>
-  </div>`;
-  document.body.appendChild(overlay);
-  const inp = document.getElementById('rename-trip-input');
-  inp.focus();
-  inp.select();
-}
-
-function confirmRenameTrip(tripId) {
-  const name = document.getElementById('rename-trip-input').value.trim();
-  document.querySelector('.modal-overlay').remove();
-  if (!name) return;
-  const trips = getTrips();
-  const trip = trips.find(t => t.id === tripId);
-  if (!trip) return;
-  trip.name = name;
-  saveTrips(trips);
-  renderTravel();
-}
-
-function selectTravelCat(name) {
-  selectedTravelCat = name;
-  document.querySelectorAll('.travel-cat-grid .cat-btn').forEach(b =>
-    b.classList.toggle('selected', b.dataset.cat === name));
-  updateTravelSubmit();
-}
-
-function updateTravelSubmit() {
-  const amt = document.getElementById('travel-amount').value;
-  const btn = document.getElementById('travel-submit-btn');
-  if (btn) btn.disabled = !(selectedTravelCat && parseFloat(amt) > 0);
-}
-
-function saveTravelRecord() {
-  const amt = parseFloat(document.getElementById('travel-amount').value);
-  if (!selectedTravelCat || !amt) return;
-  const trips = getTrips();
-  const trip = trips.find(t => t.status === 'active');
-  if (!trip) return;
-  trip.records.push({
-    id: newRecordId(),
-    date: document.getElementById('travel-date').value,
-    category: selectedTravelCat,
-    amount: amt,
-    note: document.getElementById('travel-note').value.trim(),
-    pending: document.getElementById('travel-pending-check').checked
-  });
-  saveTrips(trips);
-  document.getElementById('travel-amount').value = '';
-  document.getElementById('travel-note').value = '';
-  document.getElementById('travel-pending-check').checked = false;
-  selectedTravelCat = null;
-  showToast();
-  renderTravel();
-}
-
-function delTravelRecord(tripId, recordId) {
-  if (!confirm('删除这条记录？')) return;
-  const trips = getTrips();
-  const trip = trips.find(t => t.id === tripId);
-  if (!trip) return;
-  trip.records = trip.records.filter(r => r.id !== recordId);
-  saveTrips(trips);
-  renderTravel();
-}
-
-function getTripDateRange(trip) {
-  if (!trip.records.length) return trip.createdAt;
-  const dates = trip.records.map(r => r.date).sort();
-  const s = dates[0], e = dates[dates.length - 1];
-  return s === e ? s : s + ' ~ ' + e;
-}
-
-function getTripTotal(trip) {
-  return trip.records.reduce((s, r) => s + r.amount, 0);
-}
-
-function renderTravel() {
-  if (viewingTripId) {
-    renderTripSummary(viewingTripId);
-  } else {
-    const active = getActiveTrip();
-    if (active) renderTripRecorder(active);
-    else renderTripList();
-  }
-}
-
-function renderTripList() {
-  const panel = document.getElementById('travel-panel');
-  const archived = getTrips().filter(t => t.status === 'archived').sort((a,b) => b.id - a.id);
-  let html = `<div class="btn-group"><button class="btn btn-primary" onclick="createTrip()">新建行程</button></div>`;
-  if (archived.length) {
-    html += `<p class="card-label">历史行程</p><div class="card">`;
-    html += archived.map(t => {
-      const total = getTripTotal(t);
-      return `<div class="trip-list-item" onclick="viewingTripId=${t.id};renderTravel()">
-        <div>
-          <div class="trip-name">${esc(t.name)}</div>
-          <div class="trip-info">${getTripDateRange(t)} · ${t.records.length} 笔</div>
-        </div>
-        <div class="trip-amt">¥${total.toFixed(2)}</div>
-      </div>`;
-    }).join('');
-    html += `</div>`;
-  } else {
-    html += `<div class="card"><div class="empty-msg">还没有行程记录</div></div>`;
-  }
-  panel.innerHTML = html;
-}
-
-function renderTripRecorder(trip) {
-  const panel = document.getElementById('travel-panel');
-  const total = getTripTotal(trip);
-  const now = new Date();
-  const today = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
-  const records = [...trip.records].sort((a,b) => b.id - a.id);
-
-  let html = `
-    <div class="card">
-      <div class="trip-header">
-        <h2>${esc(trip.name)} <button class="record-edit-btn" onclick="renameTripModal(${trip.id})">✏️</button></h2>
-        <div class="trip-total">¥${total.toFixed(2)}</div>
-        <div class="trip-meta">${trip.records.length} 笔记录 · ${getTripDateRange(trip)}</div>
-      </div>
-    </div>
-    <p class="card-label">类别</p>
-    <div class="card">
-      <div class="travel-cat-grid">
-        ${TRAVEL_CATS.map(c =>
-          `<button class="cat-btn${selectedTravelCat===c.name?' selected':''}" data-cat="${c.name}" onclick="selectTravelCat('${c.name}')">
-            <span class="icon">${c.icon}</span>${c.name}
-          </button>`
-        ).join('')}
-      </div>
-    </div>
-    <p class="card-label">详情</p>
-    <div class="card">
-      <div class="form-row">
-        <span class="form-label">日期</span>
-        <input class="form-input" type="date" id="travel-date" value="${today}">
-      </div>
-      <div class="form-row">
-        <span class="form-label">金额</span>
-        <input class="form-input" type="number" id="travel-amount" placeholder="0.00" inputmode="decimal" step="0.01" oninput="updateTravelSubmit()">
-      </div>
-      <div class="form-row">
-        <span class="form-label">备注</span>
-        <input class="form-input" type="text" id="travel-note" placeholder="可选">
-      </div>
-    </div>
-    <div class="card">
-      <div class="form-toggle-row">
-        <div>
-          <label for="travel-pending-check">待确认</label>
-          <div class="toggle-desc">标记后可快速识别</div>
-        </div>
-        <div class="toggle-switch">
-          <input type="checkbox" id="travel-pending-check">
-          <span class="slider" onclick="document.getElementById('travel-pending-check').click()"></span>
-        </div>
-      </div>
-    </div>
-    <div class="btn-group">
-      <button class="btn btn-primary" id="travel-submit-btn" onclick="saveTravelRecord()" disabled>记一笔</button>
-    </div>`;
-
-  if (records.length) {
-    html += `<p class="card-label">记录</p><div class="card">`;
-    html += records.map(r => {
-      const cat = TRAVEL_CATS.find(c => c.name === r.category);
-      return `<div class="record-item">
-        <div class="record-left">
-          <div class="record-cat">${cat ? cat.icon : ''} ${esc(r.category)}${r.pending ? '<span class="record-badge pending">待确认</span>' : ''}</div>
-          <div class="record-meta">${esc(r.date)}${r.note ? ' · ' + esc(r.note) : ''}</div>
-        </div>
-        <div class="record-right">
-          <div class="record-amt">-¥${r.amount.toFixed(2)}</div>
-        </div>
-        <button class="record-del-btn" onclick="delTravelRecord(${trip.id},${r.id})">×</button>
-      </div>`;
-    }).join('');
-    html += `</div>`;
-  }
-
-  html += `<div class="btn-group">
-    <button class="btn btn-secondary" onclick="viewingTripId=${trip.id};renderTravel()">查看汇总</button>
-    <button class="btn btn-secondary" onclick="importTripCSV(${trip.id})">导入 CSV</button>
-    <button class="btn btn-cancel" onclick="endTrip(${trip.id})">结束行程</button>
-  </div>`;
-
-  panel.innerHTML = html;
-}
-
-function renderTripSummary(tripId) {
-  const panel = document.getElementById('travel-panel');
-  const trip = getTrips().find(t => t.id === tripId);
-  if (!trip) { viewingTripId = null; renderTripList(); return; }
-
-  const total = getTripTotal(trip);
-  const byCat = {};
-  trip.records.forEach(r => { byCat[r.category] = (byCat[r.category] || 0) + r.amount; });
-
-  let html = `
-    <div class="card">
-      <div class="trip-summary-total">
-        <div class="label">${esc(trip.name)}</div>
-        <div class="amount">¥${total.toFixed(2)}</div>
-      </div>
-      <div style="padding:8px 16px;font-size:12px;color:var(--label3);text-align:center;border-bottom:1px solid var(--sep)">
-        ${getTripDateRange(trip)} · 共 ${trip.records.length} 笔
-      </div>
-      ${Object.keys(byCat).length ? `<div class="cat-breakdown">
-        ${Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt]) => {
-          const c = TRAVEL_CATS.find(tc => tc.name === cat);
-          return `<div class="cat-breakdown-row"><span>${c ? c.icon : ''} ${esc(cat)}</span><span class="amt">¥${amt.toFixed(2)}</span></div>`;
-        }).join('')}
-      </div>` : ''}
-    </div>
-    <div class="btn-group">
-      <button class="btn btn-primary" onclick="exportTripCSV(${trip.id})">导出 CSV</button>
-      <button class="btn btn-secondary" onclick="viewingTripId=null;renderTravel()">返回</button>
-      <button class="btn btn-cancel" onclick="deleteTrip(${trip.id})">删除行程</button>
-    </div>`;
-
-  panel.innerHTML = html;
-}
-
-function exportTripCSV(tripId) {
-  const trip = getTrips().find(t => t.id === tripId);
-  if (!trip || !trip.records.length) { alert('没有记录'); return; }
-  const rows = [...trip.records].sort((a,b) => a.date.localeCompare(b.date)).map(r =>
-    `${r.date},${r.category},${r.amount},${(r.note||'').replace(/,/g,'，')},${r.pending?'1':''}`
-  );
-  const csv = '日期,类别,金额,备注,待确认\n' + rows.join('\n') + '\n';
-  const dates = trip.records.map(r => r.date).sort();
-  const range = dates[0] === dates[dates.length-1] ? dates[0] : dates[0] + '_' + dates[dates.length-1];
-  triggerDownload(csv, `trip_${trip.name}_${range}.csv`);
-}
-
-function importTripCSV(tripId) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.csv,text/csv';
-  input.onchange = () => {
-    const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => parseAndImportTripCSV(tripId, reader.result);
-    reader.readAsText(file);
-  };
-  input.click();
-}
-
-function parseAndImportTripCSV(tripId, text) {
-  const lines = text.replace(/^﻿/, '').trim().split('\n');
-  if (lines.length < 2) { alert('CSV 文件为空'); return; }
-  const header = lines[0].split(',');
-  const pendingIdx = header.indexOf('待确认');
-  const incoming = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',');
-    if (cols.length < 3) continue;
-    const [dateStr, category, amount] = cols;
-    const amt = parseFloat(amount);
-    if (!dateStr || isNaN(amt)) continue;
-    const rec = {
-      id: newRecordId(),
-      date: dateStr.trim(),
-      category: category.trim(),
-      amount: amt,
-      note: (cols[3] || '').trim()
-    };
-    if (pendingIdx >= 0 && cols[pendingIdx] === '1') rec.pending = true;
-    incoming.push(rec);
-  }
-  if (!incoming.length) { alert('未找到有效记录'); return; }
-  const trips = getTrips();
-  const trip = trips.find(t => t.id === tripId);
-  if (!trip) return;
-  const existSet = new Set(trip.records.map(r => `${r.date}_${r.category}_${r.amount}`));
-  const newRecs = incoming.filter(r => !existSet.has(`${r.date}_${r.category}_${r.amount}`));
-  if (!newRecs.length) { alert('所有记录已存在，无需导入。'); return; }
-  if (!confirm(`发现 ${newRecs.length} 条新记录，导入到「${trip.name}」？`)) return;
-  trip.records.push(...newRecs);
-  saveTrips(trips);
-  renderTravel();
-  alert(`已导入 ${newRecs.length} 条记录！`);
 }
 
 // ── Init ──────────────────────────────────────────────────────
@@ -1452,6 +1097,8 @@ function init() {
 
 init();
 </script>
+<script src="travel-core.js"></script>
+<script src="travel.js"></script>
 <script src="sync-core.js"></script>
 <script src="cloud-sync.js"></script>
 </body>

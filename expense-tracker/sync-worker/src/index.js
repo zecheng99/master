@@ -1,5 +1,6 @@
 const MAX_BYTES = 4 * 1024 * 1024;
-const ALLOWED_ORIGINS = ['https://shelvee11.github.io', 'http://localhost:8000', 'http://127.0.0.1:8000'];
+const ALLOWED_ORIGINS = ['https://zecheng99.github.io', 'https://shelvee11.github.io', 'http://localhost:8000', 'http://127.0.0.1:8000'];
+const CURRENCIES = ['CNY', 'JPY', 'USD', 'SGD', 'EUR', 'GBP', 'HKD', 'TWD', 'KRW', 'AUD', 'THB', 'MYR'];
 
 export function validEntries(entries) {
   if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return false;
@@ -10,7 +11,13 @@ export function validEntries(entries) {
     if (value === null) return true;
     if (key === 'budget') return Number.isFinite(value) && value > 0;
     if (!value || !Number.isSafeInteger(value.id) || value.id <= 0 || String(value.id) !== key.split(':').at(-1)) return false;
-    if (key.startsWith('trip:')) return typeof value.name === 'string' && ['active', 'archived'].includes(value.status) && !('records' in value);
+    if (key.startsWith('trip:')) {
+      if (value.lastCurrency !== undefined && !CURRENCIES.includes(value.lastCurrency)) return false;
+      if (value.rates !== undefined && (!value.rates || typeof value.rates !== 'object' || Array.isArray(value.rates) ||
+          !Object.entries(value.rates).every(([code, rate]) => CURRENCIES.includes(code) && Number.isFinite(rate) && rate > 0))) return false;
+      return typeof value.name === 'string' && ['active', 'archived'].includes(value.status) && !('records' in value);
+    }
+    if (key.startsWith('travel:') && value.currency !== undefined && !CURRENCIES.includes(value.currency)) return false;
     return typeof value.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.date) && Number.isFinite(value.amount) && value.amount >= 0 &&
       (key.startsWith('record:') ? typeof value.largeCat === 'string' && typeof value.smallCat === 'string' : typeof value.category === 'string');
   });

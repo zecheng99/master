@@ -47,10 +47,11 @@
     localStorage.setItem('travel_trips', JSON.stringify(data.trips));
     if (data.budget !== null) localStorage.setItem('weekly_food_budget', data.budget);
     if (document.getElementById('history-panel').classList.contains('active')) renderHistory();
-    // Avoid replacing a travel form with unsaved user input during a background pull.
     const travel = document.getElementById('travel-panel');
-    if (travel.classList.contains('active') && !travel.querySelector('input:focus') &&
-        !Array.from(travel.querySelectorAll('input')).some(i => i.type !== 'date' && i.value)) renderTravel();
+    if (travel.classList.contains('active') && !document.querySelector('.modal-overlay')) {
+      // Preserve the current trip's unfinished form while updating synced totals.
+      refreshTravelAfterSync();
+    }
   }
   async function request(url, key, options = {}) {
     const response = await fetch(url + '/sync', {

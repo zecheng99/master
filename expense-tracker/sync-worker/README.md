@@ -4,6 +4,11 @@
 不需要迁移手机 PWA 的浏览器存储。日常账单、旅行信息、旅行中的每笔开销及
 每周餐饮预算都会同步。
 
+旅行页支持多个同时进行的行程，每个行程分别记住上次选择的币种。已有旅行账单
+没有币种字段时按人民币处理；外币金额在汇总或结束行程时按用户填写的行程汇率
+统一折算。币种、上次选择及行程汇率均随账单同步，修改汇率会重算整个行程。
+旅行 CSV 包含原币、汇率与人民币折算金额，仍兼容以前的人民币 CSV。
+
 ## 部署
 
 在此目录执行，需要 Node.js 与可用的 Cloudflare 登录：
@@ -28,7 +33,9 @@ npx wrangler deploy
 还需要通过原有静态站点发布流程发布本次前端改动，保持原域名和路径，避免
 现有手机 PWA 因来源变化无法读取本地记录。此修改未自动执行 Git 提交或推送。
 
-服务器默认允许 `https://shelvee11.github.io` 和本地 8000 端口跨域访问；若网页
+当前前端地址为 `https://zecheng99.github.io/master/expense-tracker/`。
+服务器默认允许 `https://zecheng99.github.io`、旧地址 `https://shelvee11.github.io`
+和本地 8000 端口跨域访问；若网页
 换了域名，请修改 `src/index.js` 的 `ALLOWED_ORIGINS`，或通过 Wrangler 的
 `vars.ALLOWED_ORIGINS` 设置逗号分隔的来源列表，再部署。
 
@@ -56,18 +63,32 @@ npx wrangler deploy
   云端存储不提供端到端加密。
 - 当前为个人账本整包同步，单次上限 4 MiB，包含删除标记。超出时保留本地修改并
   显示服务器错误；大量长期数据需要后续改成分页增量同步。
-- 旅行表单有未提交输入时，后台同步会先更新存储，待下次切换页面时刷新显示。
+- 后台同步刷新旅行记录时保留当前表单输入；不同旅行的草稿分别暂存在当前页面内，
+  切换行程或标签不会丢失。未提交草稿不参与同步，刷新或关闭页面会清除草稿。
 
 ## 验证
 
 在 `expense-tracker/` 目录执行：
 
 ```sh
-node --test tests/sync.test.mjs
+node --test tests/*.test.mjs
 ```
 
 测试需要支持 `node:sqlite` 的 Node.js，覆盖两设备同时上传、离线新增与删除、旅行
 账单合并、预算迁移、上传期间修改、鉴权、revision 冲突和 Service Worker 缓存隔离。
+还覆盖混合币种统计、行程汇率重算、多行程同步、旧数据和 CSV 的兼容。
+
+浏览器回归脚本为 `tests/travel.browser.mjs`，使用 Playwright 和本机 Chrome。
+在另一个终端从 `expense-tracker/` 启动 `python3 -m http.server 8000`，然后执行：
+
+```sh
+npm install --prefix /tmp/spendex-browser-check --no-save playwright
+PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/travel.browser.mjs
+```
+
+默认 Chrome 路径适用于 macOS；可用 `CHROME_EXECUTABLE` 指定其他 Chrome 路径，
+`TEST_BASE_URL` 指定本地测试网址。脚本在隔离浏览器环境中操作虚构账单，覆盖完整
+多行程流程、草稿保留、汇率弹窗、手机布局和离线重开，不使用线上密钥或账单。
 
 部署后仍需实机验收：在电脑新增一笔，手机打开后检查；手机断网新增后恢复网络，
 再检查电脑；删除一笔后确认两端均消失。
