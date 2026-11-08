@@ -1,12 +1,16 @@
 (function () {
   'use strict';
   const { merge, flatten, materialize } = SpendexSyncCore;
+  const DEFAULT_SYNC_URL = 'https://spendex-sync.zechengyu90.workers.dev';
   const STATE = 'spendex_sync_entries_v1', CONFIG = 'spendex_sync_config_v1';
   let timer, running = false, rerun = false, generation = 0;
   let status = '未开启云同步';
   const read = (key, fallback) => JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
   const entries = () => read(STATE, {});
-  const config = () => read(CONFIG, {});
+  const config = () => {
+    const saved = read(CONFIG, {});
+    return { ...saved, url: saved.url || DEFAULT_SYNC_URL };
+  };
   const current = () => flatten(getRecords(), getTrips(), localStorage.getItem('weekly_food_budget'));
   const saveEntries = value => localStorage.setItem(STATE, JSON.stringify(value));
   function stamp(all) {
@@ -33,7 +37,7 @@
   }
   function changed() {
     capture();
-    if (config().url) {
+    if (config().key) {
       setStatus(navigator.onLine ? '有修改，等待同步' : '离线，联网后自动同步');
       clearTimeout(timer);
       timer = setTimeout(sync, 1200);
@@ -104,8 +108,7 @@
     overlay.className = 'modal-overlay'; overlay.id = 'sync-modal';
     overlay.innerHTML = `<div class="modal-box sync-box">
       <h3>Cloudflare 云同步</h3>
-      <p>电脑和手机填写相同的云端地址与同步密钥。日常账单、旅行和每周预算会自动同步，离线也能记账。</p>
-      <label for="sync-url">云端地址</label><input id="sync-url" type="url" placeholder="https://spendex-sync.你的子域.workers.dev" autocapitalize="none" spellcheck="false">
+      <p>云端地址已配置。电脑和手机填写相同的同步密钥即可连接。日常账单、旅行和每周预算会自动同步，离线也能记账。</p>
       <label for="sync-key">同步密钥</label><input id="sync-key" type="password" placeholder="部署时设置的密钥" autocomplete="off">
       <p>此处填写专用同步密钥，不是 Cloudflare 密码或 API Token。首次连接会合并已有记录；同一笔记录的冲突使用最后修改版本。</p>
       <p id="sync-status" role="status" aria-live="polite"></p>
@@ -113,26 +116,22 @@
       <button class="sync-disconnect" id="sync-disconnect">断开云同步</button>
     </div>`;
     document.body.appendChild(overlay);
-    document.getElementById('sync-url').value = config().url || '';
     document.getElementById('sync-key').value = config().key || '';
     setStatus(status);
     document.getElementById('sync-close').onclick = () => overlay.remove();
     document.getElementById('sync-save').onclick = () => {
       try {
-        const url = new URL(document.getElementById('sync-url').value.trim());
-        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname))) throw new Error('请填写 HTTPS 云端地址');
-        if (url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('请填写云端根地址，不包含路径或参数');
         const key = document.getElementById('sync-key').value.trim();
         if (key.length < 24 || !/^[\x21-\x7e]+$/.test(key)) throw new Error('同步密钥须为至少 24 位的英文、数字或符号');
         const old = config();
-        if (old.url && (old.url !== url.origin || old.key !== key) && !confirm('更换云端配置将把本机记录合并到新的云端，继续？')) return;
+        if (old.key && old.key !== key && !confirm('更换同步密钥后将使用新密钥连接云端，继续？')) return;
         generation++;
-        localStorage.setItem(CONFIG, JSON.stringify({ url: url.origin, key }));
+        localStorage.setItem(CONFIG, JSON.stringify({ url: old.url, key }));
         sync();
       } catch (error) { setStatus(error.message); }
     };
     document.getElementById('sync-disconnect').onclick = () => {
-      generation++; clearTimeout(timer); localStorage.removeItem(CONFIG);
+      generation++; rerun = false; clearTimeout(timer); localStorage.removeItem(CONFIG);
       document.getElementById('sync-key').value = '';
       setStatus('已断开，本机和云端数据均保留');
     };

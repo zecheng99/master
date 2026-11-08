@@ -22,15 +22,16 @@ function backend() {
       async run() { const result = db.prepare(sql).run(...args); return { meta: { changes: Number(result.changes) } }; } };
   } } };
 }
-function device(env, initial = {}) {
+function device(env, initial = {}, connected = true) {
   const data = new Map(Object.entries(initial));
-  data.set('spendex_sync_config_v1', JSON.stringify({ url: 'https://sync.example', key }));
+  if (connected && !data.has('spendex_sync_config_v1')) data.set('spendex_sync_config_v1', JSON.stringify({ url: 'https://sync.example', key }));
   const elements = new Map();
+  const requests = [], intervals = [];
   const ctx = vm.createContext({
     console, crypto: webcrypto, URL, AbortSignal, Date, JSON, Math,
     navigator: { onLine: false },
     localStorage: { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, String(v)), removeItem: k => data.delete(k) },
-    setTimeout: () => 1, clearTimeout() {}, setInterval() {},
+    setTimeout: () => 1, clearTimeout() {}, setInterval: callback => intervals.push(callback),
     addEventListener() {},
     document: { hidden: false, addEventListener() {}, getElementById(id) {
       if (!elements.has(id)) elements.set(id, { classList: { contains: () => false } });
@@ -38,18 +39,37 @@ function device(env, initial = {}) {
     } },
     getRecords: () => JSON.parse(data.get('expense_records') || '[]'),
     getTrips: () => JSON.parse(data.get('travel_trips') || '[]'),
-    fetch: (url, options) => worker.fetch(new Request(url, options), env)
+    fetch: (url, options) => { requests.push(url); return worker.fetch(new Request(url, options), env); }
   });
   ctx.window = ctx;
   vm.runInContext(core, ctx); vm.runInContext(client, ctx);
   return {
-    ctx, data,
+    ctx, data, requests, intervals,
     async sync() { ctx.navigator.onLine = true; await ctx.CloudSync.sync(); },
     write(k, v) { data.set(k, JSON.stringify(v)); ctx.CloudSync.changed(); },
     records: () => JSON.parse(data.get('expense_records') || '[]'),
     trips: () => JSON.parse(data.get('travel_trips') || '[]')
   };
 }
+
+test('key-only saved config uses the built-in endpoint; legacy endpoint remains compatible', async () => {
+  const env = backend();
+  const a = device(env, { spendex_sync_config_v1: JSON.stringify({ key }) });
+  a.write('expense_records', [record(1)]); await a.sync();
+  assert.ok(a.requests.every(url => url === 'https://spendex-sync.zechengyu90.workers.dev/sync'));
+  const b = device(env); await b.sync();
+  assert.deepEqual(b.records(), a.records());
+  assert.equal(b.requests[0], 'https://sync.example/sync');
+});
+
+test('without a key, local edits and periodic sync never request the built-in endpoint', async () => {
+  const a = device(backend(), {}, false);
+  a.write('expense_records', [record(1)]);
+  await a.sync();
+  await Promise.all(a.intervals.map(callback => callback()));
+  assert.deepEqual(a.requests, []);
+  assert.deepEqual(a.records(), [record(1)]);
+});
 
 test('two offline devices merge additions, edits and deletion without resurrection', async () => {
   const env = backend(), a = device(env), b = device(env);

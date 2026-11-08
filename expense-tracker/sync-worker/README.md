@@ -44,14 +44,16 @@ npx wrangler deploy
 ## 连接设备
 
 1. 更新并打开原网址的网页版和手机 PWA，点击右上角「云同步」。
-2. 两边填写同一个 Worker 根地址（例如 `https://spendex-sync.example.workers.dev`）
-   和同一个专用同步密钥，点击「保存并同步」。
+2. 两边填写同一个专用同步密钥，点击「保存并同步」。云端地址已经内置为
+   `https://spendex-sync.zechengyu90.workers.dev`，无需手动填写。
 3. 两边状态显示「已同步」后即可互相查看数据。首次连接前可用原有 CSV 导出功能
    备份重要账单。
 
 修改后约 1.2 秒自动同步，回到应用、恢复网络时也会同步；应用在前台时每 30 秒
 检查一次。关闭应用时不会持续后台同步，离线数据会在下次打开并联网时补传。
 「断开云同步」仅删除本机连接配置，保留本机与云端数据。
+已有设备保存的连接配置和密钥继续使用；未填写密钥或断开后不会请求同步接口。
+以后更换默认 Worker 地址时修改 `cloud-sync.js` 的 `DEFAULT_SYNC_URL` 并发布前端。
 
 ## 合并规则与限制
 
@@ -86,11 +88,13 @@ node --test tests/*.test.mjs
 ```sh
 npm install --prefix /tmp/spendex-browser-check --no-save playwright
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/travel.browser.mjs
+PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/sync.browser.mjs
 ```
 
 默认 Chrome 路径适用于 macOS；可用 `CHROME_EXECUTABLE` 指定其他 Chrome 路径，
 `TEST_BASE_URL` 指定本地测试网址。脚本在隔离浏览器环境中操作虚构账单，覆盖完整
 多行程流程、草稿保留、汇率弹窗、手机布局和离线重开，不使用线上密钥或账单。
+同步界面脚本验证只填密钥、旧配置兼容和断开后停止请求，使用拦截的测试接口。
 
 部署后仍需实机验收：在电脑新增一笔，手机打开后检查；手机断网新增后恢复网络，
 再检查电脑；删除一笔后确认两端均消失。
