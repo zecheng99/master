@@ -54,6 +54,10 @@ function openTrip(tripId) {
   viewingTripId = trip.status === 'archived' ? tripId : null;
   selectedTravelCat = travelDrafts.get(tripId)?.category || null;
   renderTravel();
+  const code = document.getElementById('travel-currency')?.value;
+  if (trip.status === 'active' && code && code !== 'CNY' && !Travel.validRate(Travel.rate(trip, code))) {
+    editTripRates(tripId, 'record', code);
+  }
 }
 function showTripList() {
   preserveTravelDraft();
@@ -114,6 +118,8 @@ function selectTravelCurrency(tripId) {
   trip.lastCurrency = code;
   saveTrips(trips);
   preserveTravelDraft();
+  document.getElementById('travel-rates').innerHTML = tripRatesHTML(trip, 'record', code);
+  if (code !== 'CNY' && !Travel.validRate(Travel.rate(trip, code))) editTripRates(tripId, 'record', code);
 }
 function updateTravelSubmit() {
   const amount = Number(document.getElementById('travel-amount').value);
@@ -151,6 +157,10 @@ function getTripDateRange(trip) {
 function foreignCurrencies(trip) {
   return Object.keys(Travel.totals(trip).byCurrency).filter(code => code !== 'CNY').sort();
 }
+function rateCurrencies(trip, extraCode) {
+  return [...new Set([...foreignCurrencies(trip), ...Object.keys(trip.rates || {}), extraCode])]
+    .filter(code => code !== 'CNY' && Travel.supported(code)).sort();
+}
 function viewTripSummary(tripId) {
   preserveTravelDraft();
   const trip = getTrips().find(item => item.id === tripId);
@@ -175,13 +185,15 @@ function finishTrip(tripId) {
   travelDrafts.delete(tripId); selectedTravelCat = null;
   viewingTripId = tripId; selectedTripId = tripId; renderTravel();
 }
-function editTripRates(tripId, action = 'summary') {
+function editTripRates(tripId, action = 'summary', extraCode = '') {
+  if (document.getElementById('trip-rates-modal')) return;
   const trip = getTrips().find(item => item.id === tripId);
   if (!trip) return;
   preserveTravelDraft();
-  const codes = foreignCurrencies(trip);
+  const codes = rateCurrencies(trip, extraCode);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay'; overlay.id = 'trip-rates-modal';
+  overlay.dataset.currency = extraCode;
   overlay.innerHTML = `<div class="modal-box trip-rates-box"><h3>${action === 'end' ? '确认汇率并结束行程' : '设置行程汇率'}</h3>
     <p>为「${esc(trip.name)}」统一折算人民币。修改汇率会重新计算此行程的全部记录。</p>
     ${codes.map(code => {
@@ -191,7 +203,7 @@ function editTripRates(tripId, action = 'summary') {
     }).join('')}
     <p class="rate-error" id="trip-rate-error" role="alert"></p>
     <div class="modal-btns"><button class="modal-cancel" onclick="document.getElementById('trip-rates-modal').remove();refreshTravelAfterSync()">取消</button>
-      <button class="modal-confirm" onclick="confirmTripRates(${tripId},'${action}')">${action === 'end' ? '保存并结束' : '保存并汇总'}</button></div></div>`;
+      <button class="modal-confirm" onclick="confirmTripRates(${tripId},'${action}')">${action === 'end' ? '保存并结束' : action === 'record' ? '保存汇率' : '保存并汇总'}</button></div></div>`;
   document.body.appendChild(overlay);
 }
 function confirmTripRates(tripId, action) {
@@ -199,11 +211,12 @@ function confirmTripRates(tripId, action) {
   const trips = getTrips(), trip = trips.find(item => item.id === tripId);
   if (!trip) { document.getElementById('trip-rates-modal').remove(); return showTripList(); }
   const rates = { ...trip.rates };
-  for (const code of foreignCurrencies(trip)) {
+  const extraCode = document.getElementById('trip-rates-modal').dataset.currency;
+  for (const code of rateCurrencies(trip, extraCode)) {
     const input = document.getElementById('trip-rate-' + code);
     if (!input) {
       document.getElementById('trip-rates-modal').remove();
-      return editTripRates(tripId, action);
+      return editTripRates(tripId, action, extraCode);
     }
     const info = Travel.currencies.find(item => item.code === code), value = Number(input.value) / info.unit;
     if (!Travel.validRate(value)) { document.getElementById('trip-rate-error').textContent = '请填写大于 0 的有效汇率'; input.focus(); return; }
@@ -212,6 +225,7 @@ function confirmTripRates(tripId, action) {
   trip.rates = rates; saveTrips(trips);
   document.getElementById('trip-rates-modal').remove();
   if (action === 'end') finishTrip(tripId);
+  else if (action === 'record') refreshTravelAfterSync();
   else { viewingTripId = tripId; renderTravel(); }
 }
 function deleteTrip(tripId) {
@@ -225,6 +239,16 @@ function tripCurrencyChips(trip) {
 function tripTotalLabel(trip) {
   const totals = Travel.totals(trip);
   return totals.complete ? '折合人民币 ¥' + totals.cny.toFixed(2) : '待填写汇率';
+}
+function tripRatesHTML(trip, action = 'summary', extraCode = '') {
+  const codes = rateCurrencies(trip, extraCode);
+  if (!codes.length) return '';
+  return `<div class="card rate-summary"><div class="rate-summary-header"><span>行程汇率</span>
+    <button class="trip-back" onclick="editTripRates(${trip.id},'${action}','${extraCode}')">修改汇率</button></div>
+    ${codes.map(code => {
+      const info = Travel.currencies.find(item => item.code === code), value = Travel.rate(trip, code);
+      return `<p>${info.unit} ${code} = ${Travel.validRate(value) ? Number((value * info.unit).toPrecision(12)) + ' CNY' : '待填写'}</p>`;
+    }).join('')}</div>`;
 }
 function renderTravel() {
   if (viewingTripId) {
@@ -276,6 +300,7 @@ function renderTripRecorder(trip) {
       <h2>${esc(trip.name)} <button class="record-edit-btn" aria-label="修改行程名称" onclick="renameTripModal(${trip.id})">✏️</button></h2>
       <div class="trip-total">${tripTotalLabel(trip)}</div><div class="currency-chips">${tripCurrencyChips(trip)}</div>
       <div class="trip-meta">进行中 · ${trip.records.length} 笔 · ${getTripDateRange(trip)}</div></div></div>
+    <div id="travel-rates" style="display:contents">${tripRatesHTML(trip, 'record', code)}</div>
     <p class="card-label">类别</p><div class="card"><div class="travel-cat-grid">${TRAVEL_CATS.map(cat =>
       `<button class="cat-btn${selectedTravelCat === cat.name ? ' selected' : ''}" data-cat="${cat.name}" onclick="selectTravelCat('${cat.name}')"><span class="icon">${cat.icon}</span>${cat.name}</button>`).join('')}</div></div>
     <p class="card-label">详情</p><div class="card">
@@ -284,7 +309,7 @@ function renderTripRecorder(trip) {
         <input class="form-input" type="number" id="travel-amount" placeholder="0.00" min="0" inputmode="decimal" step="0.01" value="${esc(draft?.amount || '')}" oninput="updateTravelSubmit()">
         <select class="travel-currency" id="travel-currency" aria-label="币种" onchange="selectTravelCurrency(${trip.id})">${Travel.currencies.map(item => `<option value="${item.code}"${item.code === code ? ' selected' : ''}>${item.code} ${item.name}</option>`).join('')}</select></div>
       <div class="form-row"><label class="form-label" for="travel-note">备注</label><input class="form-input" type="text" id="travel-note" placeholder="可选" value="${esc(draft?.note || '')}"></div>
-      <p class="travel-help">按原币金额记录，查看汇总或结束行程时再填写汇率。</p></div>
+      <p class="travel-help">按原币金额记录，人民币累计按行程汇率计算。汇率可随时修改。</p></div>
     <div class="card"><div class="form-toggle-row"><div><label for="travel-pending-check">待确认</label><div class="toggle-desc">标记后可快速识别</div></div>
       <div class="toggle-switch"><input type="checkbox" id="travel-pending-check"${draft?.pending ? ' checked' : ''}><span class="slider" onclick="document.getElementById('travel-pending-check').click()"></span></div></div></div>
     <div class="btn-group"><button class="btn btn-primary" id="travel-submit-btn" onclick="saveTravelRecord(${trip.id})" disabled>记一笔</button></div>`;
@@ -313,9 +338,7 @@ function renderTripSummary(tripId) {
         const subtotal = Travel.totals({ ...trip, records }), info = TRAVEL_CATS.find(item => item.name === cat);
         return `<div class="cat-breakdown-row"><span>${info?.icon || ''} ${esc(cat)}</span><span class="category-totals"><span class="amt">${subtotal.complete ? '¥' + subtotal.cny.toFixed(2) : '待折算'}</span><span class="record-meta">${Object.entries(subtotal.byCurrency).map(([code, amount]) => Travel.money(amount, code)).join(' · ')}</span></span></div>`;
       }).join('') + '</div>' : ''}</div>`;
-  const codes = foreignCurrencies(trip);
-  if (codes.length) html += `<div class="card rate-summary"><div class="rate-summary-header"><span>行程汇率</span><button class="trip-back" onclick="editTripRates(${trip.id})">修改汇率</button></div>
-    ${codes.map(code => { const info = Travel.currencies.find(item => item.code === code), value = Travel.rate(trip, code); return `<p>${info.unit} ${code} = ${Travel.validRate(value) ? Number((value * info.unit).toPrecision(12)) + ' CNY' : '待填写'}</p>`; }).join('')}</div>`;
+  html += tripRatesHTML(trip);
   html += tripRecordsHTML(trip, false);
   html += `<div class="btn-group"><button class="btn btn-primary" onclick="exportTripCSV(${trip.id})">导出 CSV</button>
     <button class="btn btn-secondary" onclick="returnFromTripSummary(${trip.id})">${trip.status === 'active' ? '继续记账' : '返回列表'}</button>

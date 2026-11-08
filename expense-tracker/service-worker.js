@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spendex-v17';
+const CACHE_NAME = 'spendex-v18';
 const BASE = new URL('./', self.location.href).pathname;
 const ASSETS = [BASE, ...['index.html', 'manifest.json', 'owl.png', 'icon-192.png', 'apple-touch-icon.png', 'data-backup.png', 'travel-core.js', 'travel.js', 'sync-core.js', 'cloud-sync.js'].map(path => BASE + path)];
 
