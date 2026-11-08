@@ -122,15 +122,16 @@ function selectTravelCurrency(tripId) {
   if (code !== 'CNY' && !Travel.validRate(Travel.rate(trip, code))) editTripRates(tripId, 'record', code);
 }
 function updateTravelSubmit() {
-  const amount = Number(document.getElementById('travel-amount').value);
+  const result = SpendexAmount.update('travel-amount');
   const button = document.getElementById('travel-submit-btn');
-  if (button) button.disabled = !(selectedTravelCat && Number.isFinite(amount) && amount > 0);
+  if (button) button.disabled = !(selectedTravelCat && result.valid && result.value > 0);
 }
 function saveTravelRecord(tripId) {
-  const amount = Number(document.getElementById('travel-amount').value);
+  const result = SpendexAmount.update('travel-amount');
+  const amount = result.value;
   const code = document.getElementById('travel-currency').value;
   const date = document.getElementById('travel-date').value;
-  if (!selectedTravelCat || !Number.isFinite(amount) || amount <= 0 || !date || !Travel.supported(code)) return;
+  if (!selectedTravelCat || !result.valid || amount <= 0 || !date || !Travel.supported(code)) return;
   // Resolve the explicit form's trip, never the first active trip in storage.
   const trips = getTrips(), trip = trips.find(item => item.id === tripId && item.status === 'active');
   if (!trip || selectedTripId !== tripId) { alert('此行程已结束或不存在，请返回行程列表'); return; }
@@ -306,8 +307,9 @@ function renderTripRecorder(trip) {
     <p class="card-label">详情</p><div class="card">
       <div class="form-row"><label class="form-label" for="travel-date">日期</label><input class="form-input" type="date" id="travel-date" value="${esc(draft?.date || travelToday())}"></div>
       <div class="form-row travel-money-row"><label class="form-label" for="travel-amount">金额</label>
-        <input class="form-input" type="number" id="travel-amount" placeholder="0.00" min="0" inputmode="decimal" step="0.01" value="${esc(draft?.amount || '')}" oninput="updateTravelSubmit()">
+        <input class="form-input money-input" type="text" id="travel-amount" placeholder="金额或算式" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="travel-amount-result" value="${esc(draft?.amount || '')}" oninput="updateTravelSubmit()" onkeydown="SpendexAmount.onKey(event,'travel-amount')">
         <select class="travel-currency" id="travel-currency" aria-label="币种" onchange="selectTravelCurrency(${trip.id})">${Travel.currencies.map(item => `<option value="${item.code}"${item.code === code ? ' selected' : ''}>${item.code} ${item.name}</option>`).join('')}</select></div>
+      <div class="amount-calculation" id="travel-amount-calculation" hidden><span id="travel-amount-result" role="status" aria-live="polite"></span><button type="button" id="travel-amount-use-result" onclick="SpendexAmount.useResult('travel-amount')" hidden>使用结果</button></div>
       <div class="form-row"><label class="form-label" for="travel-note">备注</label><input class="form-input" type="text" id="travel-note" placeholder="可选" value="${esc(draft?.note || '')}"></div>
       <p class="travel-help">按原币金额记录，人民币累计按行程汇率计算。汇率可随时修改。</p></div>
     <div class="card"><div class="form-toggle-row"><div><label for="travel-pending-check">待确认</label><div class="toggle-desc">标记后可快速识别</div></div>

@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const browser = await chromium.launch({ executablePath: process.env.CHROME_EXECUTABLE || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, args: ['--disable-background-networking', '--no-first-run'] });
+try {
+  for (const width of [320, 390, 1280]) {
+    const context = await browser.newContext({ viewport: { width, height: 844 } });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(process.env.TEST_BASE_URL || 'http://127.0.0.1:8000/');
+    await page.locator('#amount').fill('260-95-50');
+    assert.equal(await page.locator('#amount-result').innerText(), '= 115.00');
+    assert.equal(await page.locator('#submit-btn').isEnabled(), true);
+    await page.locator('#amount-use-result').click();
+    assert.equal(await page.locator('#amount').inputValue(), '115.00');
+    await page.locator('#amount').fill('260-');
+    assert.equal(await page.locator('#submit-btn').isEnabled(), false);
+    await page.evaluate(() => saveRecord());
+    assert.equal(await page.evaluate(() => getRecords().length), 0);
+    await page.locator('#amount').fill('1/0');
+    assert.match(await page.locator('#amount-result').innerText(), /除数/);
+    assert.equal(await page.locator('#submit-btn').isEnabled(), false);
+    await page.locator('#amount').fill('10-20');
+    assert.equal(await page.locator('#submit-btn').isEnabled(), false);
+    await page.locator('#amount').fill('260-95-50');
+    await page.locator('#submit-btn').click();
+    const original = (await page.evaluate(() => getRecords()))[0];
+    assert.equal(original.amount, 115);
+    await page.evaluate(id => editRecord(id), original.id);
+    await page.locator('#amount').fill('0.1+0.2');
+    await page.locator('#amount').press('Enter');
+    assert.equal(await page.locator('#amount').inputValue(), '0.30');
+    await page.locator('#submit-btn').click();
+    assert.equal((await page.evaluate(() => getRecords()))[0].amount, .3);
+
+    await page.getByRole('button', { name: '旅行', exact: true }).click();
+    await page.getByRole('button', { name: '＋ 新建行程', exact: true }).click();
+    await page.locator('#trip-name-input').fill('计算测试');
+    await page.getByRole('button', { name: '创建', exact: true }).click();
+    await page.locator('[data-cat="餐饮"]').click();
+    await page.locator('#travel-amount').fill('(100+50)*2');
+    await page.locator('#travel-currency').selectOption('JPY');
+    await page.locator('#trip-rate-JPY').fill('5');
+    await page.getByRole('button', { name: '保存汇率', exact: true }).click();
+    assert.equal(await page.locator('#travel-amount').inputValue(), '(100+50)*2');
+    assert.equal(await page.locator('#travel-amount-result').innerText(), '= 300.00');
+    await page.evaluate(() => refreshTravelAfterSync());
+    assert.equal(await page.locator('#travel-amount').inputValue(), '(100+50)*2');
+    assert.equal(await page.locator('#travel-amount-result').innerText(), '= 300.00');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.locator('#travel-submit-btn').click();
+    const trip = (await page.evaluate(() => getTrips()))[0];
+    assert.equal(trip.records[0].amount, 300);
+    assert.equal(trip.records[0].currency, 'JPY');
+    assert.match(await page.locator('.trip-header .trip-total').innerText(), /15.00/);
+    await page.locator('[data-cat="餐饮"]').click();
+    await page.locator('#travel-amount').fill('20/0');
+    assert.equal(await page.locator('#travel-submit-btn').isEnabled(), false);
+    await page.evaluate(id => saveTravelRecord(id), trip.id);
+    assert.equal((await page.evaluate(() => getTrips()))[0].records.length, 1);
+    await page.locator('#travel-amount').fill('20×3÷2');
+    await page.locator('#travel-amount-use-result').click();
+    assert.equal(await page.locator('#travel-amount').inputValue(), '30.00');
+    // The calculator must work after an offline PWA reload as well.
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await context.setOffline(true);
+    await page.reload();
+    await page.locator('#amount').fill('10+2*3');
+    assert.equal(await page.locator('#amount-result').innerText(), '= 16.00');
+    assert.equal(await page.locator('#submit-btn').isEnabled(), true);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  console.log('Amount browser checks passed: daily and travel arithmetic, editing, result button and Enter, invalid-save blocking, exchange rates, preserved expressions, responsive layouts and offline use.');
+} finally { await browser.close(); }

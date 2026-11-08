@@ -11,6 +11,11 @@
 没有汇率的外币仍标为待折算，避免混合金额被误计为人民币。
 旅行 CSV 包含原币、汇率与人民币折算金额，仍兼容以前的人民币 CSV。
 
+日常记账和旅行的金额框支持加减乘除与括号，例如 `260-95-50`、`(100+50)*2`，
+也支持 `×`、`÷`。算式下方显示结果，可点击「使用结果」或按回车；直接记账也会
+计算并按两位小数保存。除零、未完成算式、零或负金额会阻止保存。同步和 CSV
+仍只保存数值金额，不保存算式。计算功能支持离线使用。
+
 「明细 → 恢复数据」导入日常账单 CSV，支持 Excel 导出的 UTF-8、带 BOM 的 UTF-16
 及 GBK 编码，以及逗号、分号或制表符分隔。表头需包含日期、大类、小类、金额，
 类型和备注可选，列的顺序可调整。支持 Excel 的年月日写法和数字日期，导入后自动
@@ -96,6 +101,7 @@ npm install --prefix /tmp/spendex-browser-check --no-save playwright
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/travel.browser.mjs
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/sync.browser.mjs
 PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/import.browser.mjs
+PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs node tests/amount.browser.mjs
 ```
 
 默认 Chrome 路径适用于 macOS；可用 `CHROME_EXECUTABLE` 指定其他 Chrome 路径，
@@ -103,6 +109,7 @@ PLAYWRIGHT_MODULE=/tmp/spendex-browser-check/node_modules/playwright/index.mjs n
 多行程流程、草稿保留、汇率弹窗、手机布局和离线重开，不使用线上密钥或账单。
 同步界面脚本验证只填密钥、旧配置兼容和断开后停止请求，使用拦截的测试接口。
 恢复脚本通过真实文件选择器验证 Excel CSV 解析、月份显示、重复恢复及读取失败提示。
+金额脚本验证日常与旅行计算、编辑、结果按钮、异常拦截、汇率、手机布局和离线计算。
 
 部署后仍需实机验收：在电脑新增一笔，手机打开后检查；手机断网新增后恢复网络，
 再检查电脑；删除一笔后确认两端均消失。

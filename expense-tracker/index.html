@@ -134,7 +134,12 @@ main {
   padding: 12px 0;
 }
 .form-input::placeholder { color: var(--label3); }
-.form-input[type="number"] { font-size: 20px; font-weight: 600; color: var(--accent); }
+.form-input[type="number"], .money-input { font-size: 20px; font-weight: 600; color: var(--accent); }
+.money-input { min-width: 0; }
+.amount-calculation { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--sep); font-size: 13px; color: var(--accent); }
+.amount-calculation[hidden], .amount-calculation button[hidden] { display: none; }
+.amount-calculation button { flex-shrink: 0; border: 1px solid var(--sep); border-radius: 7px; padding: 5px 8px; background: var(--fill); color: var(--accent); font: inherit; cursor: pointer; }
+.amount-calculation.amount-error { color: var(--red); }
 .form-input[type="date"] {
   color: var(--label2); -webkit-appearance: none; appearance: none;
   text-align: right; direction: rtl;
@@ -473,9 +478,10 @@ main {
         <input class="form-input" type="date" id="record-date">
       </div>
       <div class="form-row">
-        <span class="form-label">金额</span>
-        <input class="form-input" type="number" id="amount" placeholder="0.00" inputmode="decimal" step="0.01">
+        <label class="form-label" for="amount">金额</label>
+        <input class="form-input money-input" type="text" id="amount" placeholder="金额或算式" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="amount-result" onkeydown="SpendexAmount.onKey(event,'amount')">
       </div>
+      <div class="amount-calculation" id="amount-calculation" hidden><span id="amount-result" role="status" aria-live="polite"></span><button type="button" id="amount-use-result" onclick="SpendexAmount.useResult('amount')" hidden>使用结果</button></div>
       <div class="form-row">
         <span class="form-label">备注</span>
         <input class="form-input" type="text" id="note" placeholder="可选">
@@ -555,6 +561,7 @@ main {
 <div class="toast" id="toast">已记录</div>
 
 <script src="expense-csv.js"></script>
+<script src="amount-math.js"></script>
 <script>
 const CATS = [
   {code:"A-衣", icon:"👔", subs:["衣物","护肤品","彩妆"]},
@@ -729,13 +736,14 @@ function selectSub(el, sub) {
 }
 
 function updateSubmit() {
-  const amt = document.getElementById('amount').value;
-  document.getElementById('submit-btn').disabled = !(selectedCat && selectedSub && parseFloat(amt) > 0);
+  const result = SpendexAmount.update('amount');
+  document.getElementById('submit-btn').disabled = !(selectedCat && selectedSub && result.valid && result.value > 0);
 }
 
 function saveRecord() {
-  const amt = parseFloat(document.getElementById('amount').value);
-  if (!selectedCat || !selectedSub || !amt) return;
+  const result = SpendexAmount.update('amount');
+  if (!selectedCat || !selectedSub || !result.valid || result.value <= 0) return;
+  const amt = result.value;
   const dtVal = document.getElementById('record-date').value;
   const record = {
     id:       editingId || newRecordId(),
