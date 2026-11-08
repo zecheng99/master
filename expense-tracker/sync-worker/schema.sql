@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS sync_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  revision INTEGER NOT NULL,
+  entries TEXT NOT NULL
+);

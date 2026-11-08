@@ -408,6 +408,12 @@ main {
 .trip-summary-total .amount {
   font-size: 32px; font-weight: 700; color: var(--orange); margin-top: 4px;
 }
+.sync-box p { font-size: 13px; line-height: 1.6; color: var(--label2); margin: 12px 0; }
+.sync-box label { display: block; font-size: 13px; text-align: left; margin-top: 12px; }
+.sync-box input { width: 100%; margin-top: 6px; }
+.sync-box { max-height: 90dvh; overflow-y: auto; }
+.sync-disconnect { margin-top: 16px; border: 0; background: none; color: var(--label2); cursor: pointer; }
+#cloud-sync-button { background: var(--bg2); color: var(--accent); border: 1px solid var(--sep); border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -417,6 +423,7 @@ main {
     <h1>Spendex</h1>
     <p id="today-label"></p>
   </div>
+  <button id="cloud-sync-button" onclick="CloudSync.open()">☁ 云同步</button>
 </header>
 
 <div class="tab-bar">
@@ -544,6 +551,13 @@ let viewMonth   = new Date().toISOString().slice(0,7);
 let activeFilter = 'all';
 let catFilter = null;   // 明细页：点击类别后只看该大类的记录
 
+// Numeric IDs remain compatible with existing inline event handlers.
+let lastRecordId = 0;
+function newRecordId() {
+  lastRecordId = Math.max(lastRecordId + 1, Date.now() * 1000 + Math.floor(Math.random() * 1000));
+  return lastRecordId;
+}
+
 // ── Storage ──────────────────────────────────────────────────
 
 function getRecords() {
@@ -552,6 +566,7 @@ function getRecords() {
 }
 function saveRecords(records) {
   localStorage.setItem('expense_records', JSON.stringify(records));
+  window.CloudSync?.changed();
 }
 
 function esc(s) {
@@ -589,6 +604,7 @@ function restoreSettings(settings) {
       if (!confirm(`备份里的每周饮食预算是 ¥${n}，当前是 ¥${stored}。要改用备份里的吗？`)) continue;
     }
     localStorage.setItem('weekly_food_budget', n);
+  window.CloudSync?.changed();
     changed = true;
   }
   return changed;
@@ -620,7 +636,7 @@ function parseAndImportCSV(text) {
     const amt = parseFloat(amount);
     if (!dateStr || isNaN(amt)) continue;
     const rec = {
-      id: new Date(dateStr).getTime() + i,
+      id: newRecordId(),
       date: dateStr.trim(),
       dateStr: dateStr.trim(),
       largeCat: largeCat.trim(),
@@ -696,7 +712,7 @@ function saveRecord() {
   if (!selectedCat || !selectedSub || !amt) return;
   const dtVal = document.getElementById('record-date').value;
   const record = {
-    id:       editingId || Date.now(),
+    id:       editingId || newRecordId(),
     date:     dtVal,
     dateStr:  dtVal,
     largeCat: selectedCat.code,
@@ -786,6 +802,7 @@ function confirmBudget() {
   document.querySelector('.modal-overlay').remove();
   if (isNaN(n) || n <= 0) return;
   localStorage.setItem('weekly_food_budget', n);
+  window.CloudSync?.changed();
   renderHistory();
 }
 
@@ -1052,6 +1069,7 @@ function getTrips() {
 }
 function saveTrips(trips) {
   localStorage.setItem('travel_trips', JSON.stringify(trips));
+  window.CloudSync?.changed();
 }
 function getActiveTrip() {
   return getTrips().find(t => t.status === 'active') || null;
@@ -1081,7 +1099,7 @@ function confirmCreateTrip() {
   const now = new Date();
   const dateStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
   trips.push({
-    id: Date.now(),
+    id: newRecordId(),
     name: name,
     status: 'active',
     createdAt: dateStr,
@@ -1162,7 +1180,7 @@ function saveTravelRecord() {
   const trip = trips.find(t => t.status === 'active');
   if (!trip) return;
   trip.records.push({
-    id: Date.now(),
+    id: newRecordId(),
     date: document.getElementById('travel-date').value,
     category: selectedTravelCat,
     amount: amt,
@@ -1388,7 +1406,7 @@ function parseAndImportTripCSV(tripId, text) {
     const amt = parseFloat(amount);
     if (!dateStr || isNaN(amt)) continue;
     const rec = {
-      id: Date.now() + i,
+      id: newRecordId(),
       date: dateStr.trim(),
       category: category.trim(),
       amount: amt,
@@ -1434,5 +1452,7 @@ function init() {
 
 init();
 </script>
+<script src="sync-core.js"></script>
+<script src="cloud-sync.js"></script>
 </body>
 </html>

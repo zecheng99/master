@@ -1,0 +1,8 @@
+name = "spendex-sync"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "spendex"
+database_id = "09d9c9ba-a20a-455b-ae1f-02b2419f2913"
