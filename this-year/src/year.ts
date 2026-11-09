@@ -24,8 +24,8 @@ export type Category = typeof CATEGORIES[number];
 // Stored category values remain stable for existing records and backups.
 const CATEGORY_LABELS: Record<Category,string> = {
  '旅行与户外': '出去走走',
- '学习与成长': '学习与成长',
- '运动与健康': '运动与健康',
+ '学习与成长': '学点新的',
+ '运动与健康': '运动一下',
  '日常生活': '做个实验',
 };
 export function categoryLabel(category: Category) { return CATEGORY_LABELS[category]; }
