@@ -1,6 +1,6 @@
 # 这一年 · 365 天心愿手账
 
-前端发布到现有 `master` 仓库的 GitHub Pages 子目录 `/master/this-year/`，独立 Cloudflare Worker + D1 + 私有 R2 保存记录和照片。无需 ChatGPT 账户。保留奶油白手账界面、11 条心愿、次数进度、完成日期、照片与心得。
+前端发布到现有 `master` 仓库的 GitHub Pages 子目录 `/master/this-year/`，独立 Cloudflare Worker + D1 + 私有 R2 保存记录和照片。无需 ChatGPT 账户。界面采用与 Spendex 一致的蓝紫主色、浅灰背景、白色圆角卡片与系统字体。支持 11 条心愿、次数进度、完成日期、照片与心得。
 
 ## 使用
 
