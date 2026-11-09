@@ -26,7 +26,7 @@ function device(env,initial={},connected=true){
  addEventListener:(k,fn)=>events[k]=fn,confirm:()=>true,showToast(){},renderCurrent(){},
  fetch:async(url,options)=>{requests.push(options.method||'GET');return worker.fetch(new Request(url,options),env);}});
  ctx.window=ctx;
- vm.runInContext(`const FOODS_KEY='protein-foods',RECORDS_KEY='protein-records',TARGET_KEY='protein-target';const FAST_MODES=[{},{},{}];function loadJSON(k,f){return JSON.parse(localStorage.getItem(k)||JSON.stringify(f));}let foods=loadJSON(FOODS_KEY,[]),records=loadJSON(RECORDS_KEY,{}),fastRecords=loadJSON('fasting-records',{}),target=Number(localStorage.getItem(TARGET_KEY)),fastModeIndex=0;`,ctx);
+ vm.runInContext(`const FOODS_KEY='protein-foods',RECORDS_KEY='protein-records',TARGET_KEY='protein-target';const FAST_MODES=[{},{},{}];const DEFAULT_TARGET=95,DEFAULT_FOODS=[{"id": "f1", "name": "鸡蛋", "unit": "个", "proteinPer": 7, "perAmount": 1}];function loadJSON(k,f){return JSON.parse(localStorage.getItem(k)||JSON.stringify(f));}let foods=loadJSON(FOODS_KEY,[]),records=loadJSON(RECORDS_KEY,{}),fastRecords=loadJSON('fasting-records',{}),target=Number(localStorage.getItem(TARGET_KEY)),fastModeIndex=0;`,ctx);
  // Don't start a request until the test has control of the device.
  ctx.navigator.onLine=false;vm.runInContext(core,ctx);vm.runInContext(client,ctx);
  return {ctx,store,elements,requests,events,timers,async sync(){ctx.navigator.onLine=true;await ctx.HealthCloud.sync();},write(k,v){store.set(k,JSON.stringify(v));ctx.HealthCloud.changed();},read:k=>JSON.parse(store.get(k)||'null')};
@@ -57,3 +57,5 @@ test('auth, origin, shape validation, and optimistic concurrency guards reject i
  assert.equal((await request({method:'PUT',headers,body:JSON.stringify({revision:0,entries:{bad:{stamp:'bad',value:1}}})})).status,400);
  const put=()=>request({method:'PUT',headers,body:JSON.stringify({revision:0,entries:{}})});assert.equal((await put()).status,200);assert.equal((await put()).status,409);
 });
+
+test('a blank device cannot seed defaults over another device personalized initial settings',async()=>{const env=backend(),blank=device(env);await blank.sync();const custom=[{...food,name:'自定义鸡蛋'}];const phone=device(env,{'protein-foods':JSON.stringify(custom),'protein-target':'130','fasting-mode':'2'});await phone.sync();await blank.sync();assert.deepEqual(blank.read('protein-foods'),custom);assert.equal(blank.read('protein-target'),130);assert.equal(blank.read('fasting-mode'),2);});

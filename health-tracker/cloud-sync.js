@@ -15,7 +15,10 @@
     const stamp=seed?'0000000000000000-seed':String(Math.max(Date.now(),previous+1)).padStart(16,'0')+'-'+crypto.randomUUID();
     for(const key of new Set([...Object.keys(all),...Object.keys(data)])) {
       const value=data[key]??null;
-      if(JSON.stringify(all[key]?.value??null)!==JSON.stringify(value)) all[key]={value,stamp};
+      const customInitial=(key==='foods'&&JSON.stringify(value)!==JSON.stringify(typeof DEFAULT_FOODS==='undefined'?foods:DEFAULT_FOODS)) || (key==='target'&&value!==(typeof DEFAULT_TARGET==='undefined'?95:DEFAULT_TARGET)) || (key==='fastModeIndex'&&value!==0);
+      const initialStamp=customInitial?'0000000000000001-seed':'0000000000000000-seed';
+      if(JSON.stringify(all[key]?.value??null)!==JSON.stringify(value)) all[key]={value,stamp:seed?initialStamp:stamp};
+      else if(customInitial&&all[key]?.stamp==='0000000000000000-seed') all[key]={value,stamp:initialStamp};
     }
     persist(all);
   }

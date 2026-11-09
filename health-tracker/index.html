@@ -580,7 +580,7 @@ main {
     <input class="form-input" id="health-sync-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="填写专用密钥，不是 Cloudflare 密码">
     <div style="display:flex;gap:14px;margin-top:8px"><button class="btn btn-outline" id="health-sync-show" onclick="HealthCloud.reveal()">显示</button><button class="btn btn-outline" onclick="HealthCloud.copyKey()">复制密钥</button></div>
     <p id="health-sync-status" role="status" aria-live="polite" style="font-size:13px;margin:16px 0"></p>
-    <p style="font-size:12px;color:var(--label2);line-height:1.7">首次连接合并已有记录，云端已有的目标和食材库优先；之后同一项的冲突采用最后修改版本。密钥仅保存在当前浏览器，持有密钥者可读写云端记录；不提供端到端加密。</p>
+    <p style="font-size:12px;color:var(--label2);line-height:1.7">首次连接合并已有记录，默认设置不会覆盖已有个性化设置；之后同一项的冲突采用最后修改版本。密钥仅保存在当前浏览器，持有密钥者可读写云端记录；不提供端到端加密。</p>
     <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-outline" style="flex:1" onclick="HealthCloud.close()">关闭</button><button class="btn btn-primary" style="flex:1" onclick="HealthCloud.connect()">保存并同步</button></div>
     <button class="btn btn-outline btn-block" style="margin-top:12px" onclick="HealthCloud.disconnect()">断开同步（保留数据）</button>
   </div>
