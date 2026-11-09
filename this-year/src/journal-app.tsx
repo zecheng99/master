@@ -34,13 +34,14 @@ function WishCard({wish,index,recordCount,busy,offline,pinnedCount,onOpen,onComp
 export default function JournalApp(){
  const [offline,setOffline]=useState(false);const [cloudUrl,setCloudUrl]=useState(()=>getConfig().url);const [cloudKey,setCloudKey]=useState(()=>getConfig().key);const [showKey,setShowKey]=useState(false);
  const [data,setData]=useState<State>({wishes:[],entries:[]});const [loading,setLoading]=useState(true);const [loadError,setLoadError]=useState('');
+ const pinPendingRef=useRef(false);const pinRevisionRef=useRef(0);
  const [page,setPage]=useState<'home'|'all'>('home');const [category,setCategory]=useState<Category>('日常生活');const headerRef=useRef<HTMLElement>(null);
  const [time,setTime]=useState<ReturnType<typeof countdown>|null>(null);const [filter,setFilter]=useState('all');const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState(false);const busyRef=useRef(false);
  const [selected,setSelected]=useState<string|null>(null);const [adding,setAdding]=useState(false);const [title,setTitle]=useState('');const [counted,setCounted]=useState(false);const [target,setTarget]=useState('30');const [completeDay,setCompleteDay]=useState('');const [draft,setDraft]=useState<Draft|null>(null);
  const [dirty,setDirty]=useState(false);const [wishDirty,setWishDirty]=useState(false);const [newWishId,setNewWishId]=useState('');const [help,setHelp]=useState(false);const [lightbox,setLightbox]=useState<string|null>(null);const dialogRef=useRef<HTMLDivElement>(null);const photosRef=useRef<Draft|null>(null); photosRef.current=draft;
  useEffect(()=>{const header=headerRef.current;if(!header)return;const update=()=>document.documentElement.style.setProperty('--thisyear-header-height',header.offsetHeight+'px');update();const observer=new ResizeObserver(update);observer.observe(header);return()=>observer.disconnect();},[]);
  useEffect(()=>{window.scrollTo(0,0);},[page]);
- const reload=useCallback(async()=>{const {state,offline}=await loadState();setData(state);setOffline(offline);setLoadError('');},[]);
+ const reload=useCallback(async()=>{const revision=pinRevisionRef.current;const {state,offline}=await loadState();if(pinPendingRef.current||revision!==pinRevisionRef.current)return;setData(state);setOffline(offline);setLoadError('');if(!offline)await remember(state);},[]);
  useEffect(()=>{if(!getConfig().key){setLoading(false);setHelp(true);setLoadError('连接你的云端手账后，就能看到心愿。');return;}reload().catch(e=>setLoadError(e.message)).finally(()=>setLoading(false));},[reload]);
  useEffect(()=>{const tick=()=>setTime(countdown()); tick();const timer=setInterval(tick,15000);const visible=()=>{if(document.visibilityState==='visible'){tick();if(!busyRef.current)reload().catch(()=>{});}};document.addEventListener('visibilitychange',visible);window.addEventListener('online',visible);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',visible);};},[reload]);
  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),3500);return()=>clearTimeout(t);},[notice]);
@@ -60,7 +61,17 @@ export default function JournalApp(){
  const focus=homeSections(data.wishes);
  const visible=data.wishes.filter(w=>filter==='all'||(filter==='done'?!!w.completed:!w.completed));
  const groups=groupWishes(visible);
- const togglePin=(w:Wish)=>run(async()=>{await api('wishes/'+w.id+'/pin','PATCH',{pinned:!w.pinned});await reload();},w.pinned?'已取消置顶':'已置顶到首页');
+ const togglePin=(w:Wish)=>run(async()=>{
+  if(offline)throw new Error('当前离线，请联网后保存');
+  const next:State={...data,wishes:data.wishes.map(item=>item.id===w.id?{...item,pinned:w.pinned?0:1}:item)};
+  pinPendingRef.current=true;pinRevisionRef.current++;
+  // Show the change immediately; a pin write does not need a full journal download.
+  setData(next);
+  try{await api('wishes/'+w.id+'/pin','PATCH',{pinned:!w.pinned});}
+  catch(e){setData(data);throw e;}
+  finally{pinPendingRef.current=false;pinRevisionRef.current++;}
+  await remember(next);
+ },w.pinned?'已取消置顶':'已置顶到首页');
  const renderCard=(w:Wish)=><WishCard key={w.id} wish={w} index={data.wishes.findIndex(a=>a.id===w.id)} recordCount={data.entries.filter(e=>e.wish_id===w.id).length} busy={busy} offline={offline} pinnedCount={focus.pinned.length} onOpen={()=>open(w)} onComplete={()=>run(()=>patch(w.id,{completed:!w.completed}),w.completed?'已恢复为未完成':'心愿已完成')} onPin={()=>togglePin(w)} onProgress={progress=>run(()=>patch(w.id,{progress}),'进度已更新')}/>;
  const loadingView=loading?<div className="empty"><LoaderCircle className="spin"/>正在打开你的心愿…</div>:loadError?<div className="empty"><p>{loadError}</p><button className="secondary" onClick={()=>run(reload)}><RefreshCw size={16}/>重新加载</button></div>:null;
  return <div className="app-shell">
