@@ -1,0 +1,4 @@
+sync-worker/wrangler.toml
+sync-worker/.dev.vars*
+sync-worker/.wrangler/
+.local-connection.json
