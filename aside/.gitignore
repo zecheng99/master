@@ -1,0 +1,2 @@
+# Existing deployment credentials and private local runtime stay outside the public source.
+.local-connection.json

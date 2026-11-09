@@ -1,29 +1,11 @@
-const CACHE_NAME = 'aside-v3';
-const BASE = '/master/aside/';
-const ASSETS = [BASE, BASE + 'index.html', BASE + 'manifest.json'];
-
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-  ));
-  self.clients.claim();
-});
-
-// network-first：在线永远拿最新版，离线回退到最近一次成功加载的缓存
-self.addEventListener('fetch', e => {
-  // 云同步是跨域 POST。Cache API 只认 GET，硬走下面的 put 会 reject 刷一片报错；
-  // 离线时 caches.match 又只会返回 undefined，白白把请求变成网络错误。直接放行
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    fetch(e.request).then(r => {
-      const clone = r.clone();
-      caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-      return r;
-    }).catch(() => caches.match(e.request))
-  );
+const PREFIX='aside-';
+const CACHE_NAME=PREFIX+'v4';
+const BASE=new URL('./',self.location.href).pathname;
+const ASSETS=[BASE,...['index.html','manifest.json','icon-192.png','icon-512.png','cloud-images.js'].map(path=>BASE+path),new URL('../shared/cloud-sync-ui.js',self.location.href).pathname];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith(PREFIX)&&k!==CACHE_NAME).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
+self.addEventListener('fetch',e=>{
+ const url=new URL(e.request.url);
+ if(e.request.method!=='GET'||url.origin!==self.location.origin||!ASSETS.includes(url.pathname)||e.request.headers.has('Authorization'))return;
+ e.respondWith(fetch(e.request,{cache:'no-cache'}).then(response=>{if(response.ok){const clone=response.clone();e.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.put(e.request,clone)));}return response;}).catch(async()=>await (await caches.open(CACHE_NAME)).match(e.request)||Response.error()));
 });

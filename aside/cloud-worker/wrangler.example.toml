@@ -1,0 +1,10 @@
+name = "aside-sync"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+[[d1_databases]]
+binding = "DB"
+database_name = "daylog"
+database_id = "EXISTING_DATABASE_ID"
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "aside-images"
