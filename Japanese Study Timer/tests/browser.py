@@ -10,6 +10,10 @@ root = Path(__file__).resolve().parents[1]
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(root), **kwargs)
+    def translate_path(self, path):
+        if path.startswith('/shared/'):
+            return str(root.parent / path.lstrip('/'))
+        return super().translate_path(path)
     def log_message(self, *args):
         pass
 server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -34,7 +38,8 @@ def wait(code):
         time.sleep(.05)
     raise AssertionError(code)
 try:
-    wait('!!document.querySelector("#syncUrl")')
+    wait('!!document.querySelector("#syncOverviewStatus")')
+    ev('toggleSyncCfg();true')
     assert ev('document.querySelector("#syncUrl").value') == 'https://jp-study-sync.zechengyu90.workers.dev'
     assert ev('document.querySelector("#syncToken").type') == 'password'
     ev('''window.__requests=[];window.__reply={now:1000,sessions:[{id:"remote",data:JSON.stringify({id:"remote",date:"2026-11-09",duration:900,topic:"听力"})}],settings:JSON.stringify({dailyGoalMinutes:45,weeklyGoalDays:5})};window.fetch=async(u,o)=>{window.__requests.push(JSON.parse(o.body));return new Response(JSON.stringify(window.__reply),{status:200,headers:{"Content-Type":"application/json"}})};const local=loadData();local.sessions=[{id:"local",date:"2026-11-08",duration:600,topic:"阅读"}];local.activeTimer={topic:"本地计时",elapsed:30,running:false};saveData(local);switchTab("settings");document.querySelector("#syncToken").value="browser-test-only-key-123456789";saveSyncCfg();true''')
@@ -42,7 +47,7 @@ try:
     assert ev('loadData().settings.dailyGoalMinutes') == 45
     assert ev('loadData().activeTimer.topic') == '本地计时'
     assert ev('window.__requests[0].sessions[0].id') == 'local'
-    assert ev('document.querySelector("#syncDetail").hidden')
+    assert ev('!document.querySelector("#jp-sync-modal").hidden')
     assert ev('document.querySelector("#syncToken").type') == 'password'
     assert not ev('"activeTimer" in window.__requests[0]')
     print('PASS: key-only setup, existing data upload, remote pull, goals, masked key and local timer')

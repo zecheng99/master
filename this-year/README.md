@@ -63,3 +63,5 @@ Worker 首次部署：
 浏览器测试通过 web-access CDP Proxy 运行，只能针对可丢弃的本地测试数据库。先对本地 D1 应用 schema.sql（仅新库）和 `wrangler d1 migrations apply this-year --local`，再启动 Wrangler dev（127.0.0.1:8787）和映射 `/master/` 到仓库根目录的静态服务（127.0.0.1:8000），并在 `.dev.vars` 设置本地密钥，运行 `python3 tests/browser.py`。该测试验证双 Tab、四分类、7 项置顶上限、开始后自动进入“进行中”、表单、真实照片压缩上传、失败保留草稿、重试、达标、带分类/置顶/照片的备份恢复及 320/390/430px 手机布局；不会调用生产数据接口。
 
 原 ChatGPT Sites 站点保留作为迁移前副本。新旧站不持续同步，迁移后请使用新地址。
+
+云同步表单通过 `src/sync-settings.tsx` 复用仓库 `shared/cloud-sync-ui.js`，与健康追踪和日语计时器使用同一套地址/密钥/复制/连接样式。React 构建将模块打包到本应用资源中，原有照片备份和同步协议保持兼容。

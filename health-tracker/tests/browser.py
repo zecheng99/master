@@ -10,6 +10,10 @@ root = Path(__file__).resolve().parents[1]
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(root), **kwargs)
+    def translate_path(self, path):
+        if path.startswith('/shared/'):
+            return str(root.parent / path.lstrip('/'))
+        return super().translate_path(path)
     def log_message(self, *args):
         pass
 server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -43,6 +47,16 @@ try:
     assert ev('fastRecords["2026-11-09"].start') == '08:00'
     assert ev('document.querySelector("#health-sync-key").type') == 'password'
     print('PASS: visible header entry, masked key setup, existing protein records merge, goals and fasting pull')
+    ev('document.querySelector("#health-sync-show").click();true')
+    assert ev('document.querySelector("#health-sync-key").type') == 'text'
+    ev('HealthCloud.close();HealthCloud.open();Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:async value=>{window.__copied=value;}}});document.querySelector("[data-action=copy]").click();true')
+    assert ev('document.querySelector("#health-sync-key").type') == 'password'
+    wait('window.__copied==="browser-health-test-key-123456789"')
+    ev('window.confirm=()=>true;document.querySelector("#health-sync-url").value="https://alternate-sync.example";document.querySelector(".cs-form").requestSubmit();true')
+    wait('document.querySelector("#health-sync-status").textContent.startsWith("已同步")')
+    assert ev('JSON.parse(localStorage.health_sync_config_v1).url') == 'https://alternate-sync.example'
+    print('PASS: common panel reveals/copies key, reopens masked, and persists an editable Worker address')
+
     ev('Object.defineProperty(navigator,"onLine",{configurable:true,value:false});fastRecords["2026-11-09"].end="16:00";saveFastRecords();HealthCloud.sync();true')
     count = ev('window.__calls.length')
     assert ev('fastRecords["2026-11-09"].end') == '16:00'
@@ -63,7 +77,7 @@ try:
     wait('!!document.querySelector("iframe").contentWindow.HealthCloud')
     for width in [320,390,430]:
         ev(f'document.querySelector("iframe").style.width="{width}px";true')
-        layout=ev('(()=>{const f=document.querySelector("iframe"),d=f.contentDocument;f.contentWindow.HealthCloud.open();const b=d.querySelector("#health-sync-modal .modal-box").getBoundingClientRect();return {width:f.contentWindow.innerWidth,scroll:d.documentElement.scrollWidth,left:b.left,right:b.right};})()')
+        layout=ev('(()=>{const f=document.querySelector("iframe"),d=f.contentDocument;f.contentWindow.HealthCloud.open();const b=d.querySelector("#health-sync-modal .cs-dialog").getBoundingClientRect();return {width:f.contentWindow.innerWidth,scroll:d.documentElement.scrollWidth,left:b.left,right:b.right};})()')
         assert layout['width']==width and layout['scroll']==width and layout['left']>=0 and layout['right']<=width,layout
     print('PASS: failures and disconnect retain data; sync dialog fits 320/390/430px screens')
 finally:

@@ -56,7 +56,7 @@ test('edits during upload queue another sync and preserve new records',async()=>
  await a.sync();assert.equal(a.read().sessions.length,2);assert.ok(a.timers.length);await delay();await a.sync();const b=device(env);await b.sync();assert.equal(b.read().sessions.length,2);
 });
 test('configuration validation protects keys and switching connection resets every baseline',()=>{
- const a=device(backend());a.saved.set('jp-sync-seth','old');a.saved.set('jp-sync-at','99');a.saved.set('jp-sync-snap','{}');a.ctx.loadSyncCfg();
+ const a=device(backend());a.saved.set('jp-sync-seth','old');a.saved.set('jp-sync-at','99');a.saved.set('jp-sync-snap','{}');a.ctx.loadSyncCfg();a.ctx.document.getElementById('syncUrl');a.ctx.document.getElementById('syncToken');
  a.elements.get('syncUrl').value='http://example.com';a.elements.get('syncToken').value=key;a.ctx.saveSyncCfg();assert.equal(a.saved.get('jp-sync-url'),undefined);
  a.elements.get('syncUrl').value='https://different.example';a.ctx.navigator.onLine=false;a.ctx.saveSyncCfg();assert.equal(a.saved.get('jp-sync-seth'),undefined);assert.equal(a.saved.get('jp-sync-at'),undefined);assert.equal(a.saved.get('jp-sync-token'),key);
 });

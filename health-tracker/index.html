@@ -456,7 +456,7 @@ main {
 <body>
 
 <header>
-  <div style="display:flex;align-items:center;justify-content:space-between"><h1>ProFast</h1><button class="btn btn-outline" id="health-sync-button" style="padding:7px 12px;font-size:13px" onclick="HealthCloud.open()">☁ 云同步</button></div>
+  <div style="display:flex;align-items:center;justify-content:space-between"><h1>ProFast</h1><button class="cs-trigger" id="health-sync-button" onclick="HealthCloud.open()">☁ 云同步</button></div>
   <p id="today-label"></p>
   <div class="seg-ctrl" style="margin:10px 0 0">
     <button class="seg-btn" id="seg-protein" onclick="setAppMode('protein')">蛋白质</button>
@@ -572,19 +572,6 @@ main {
   </div>
 </div>
 
-<div class="modal-overlay" id="health-sync-modal" onclick="if(event.target===this)HealthCloud.close()">
-  <div class="modal-box" style="padding:22px;text-align:left;max-height:85dvh;overflow:auto">
-    <h2 style="font-size:19px;margin-bottom:12px">云同步</h2>
-    <p style="font-size:13px;color:var(--label2);line-height:1.7">蛋白质记录、断食记录、每日目标和食材库自动同步。服务地址已配置，两台设备填写相同密钥即可。离线时照常记录，联网后自动补传。</p>
-    <label for="health-sync-key" class="form-label" style="display:block;margin-top:16px">专用同步密钥</label>
-    <input class="form-input" id="health-sync-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="填写专用密钥，不是 Cloudflare 密码">
-    <div style="display:flex;gap:14px;margin-top:8px"><button class="btn btn-outline" id="health-sync-show" onclick="HealthCloud.reveal()">显示</button><button class="btn btn-outline" onclick="HealthCloud.copyKey()">复制密钥</button></div>
-    <p id="health-sync-status" role="status" aria-live="polite" style="font-size:13px;margin:16px 0"></p>
-    <p style="font-size:12px;color:var(--label2);line-height:1.7">首次连接合并已有记录，默认设置不会覆盖已有个性化设置；之后同一项的冲突采用最后修改版本。密钥仅保存在当前浏览器，持有密钥者可读写云端记录；不提供端到端加密。</p>
-    <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-outline" style="flex:1" onclick="HealthCloud.close()">关闭</button><button class="btn btn-primary" style="flex:1" onclick="HealthCloud.connect()">保存并同步</button></div>
-    <button class="btn btn-outline btn-block" style="margin-top:12px" onclick="HealthCloud.disconnect()">断开同步（保留数据）</button>
-  </div>
-</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1680,6 +1667,7 @@ function init() {
 
 init();
 </script>
+<script src="../shared/cloud-sync-ui.js"></script>
 <script src="sync-core.js"></script>
 <script src="cloud-sync.js"></script>
 </body>

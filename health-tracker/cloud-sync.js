@@ -3,6 +3,7 @@
   const {merge,flatten,materialize}=HealthSyncCore;
   const DEFAULT_URL='https://health-tracker-sync.zechengyu90.workers.dev';
   const STATE='health_sync_entries_v1',CONFIG='health_sync_config_v1';
+  let ui=null;
   let timer,running=false,rerun=false,generation=0,retries=0,status='未开启云同步';
   const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
   const entries=()=>read(STATE,{});
@@ -23,7 +24,7 @@
     persist(all);
   }
   function setStatus(text) {
-    status=text;
+    status=text;ui?.setStatus(text,text.startsWith('同步失败'));
     const el=document.getElementById('health-sync-status');if(el)el.textContent=text;
     const button=document.getElementById('health-sync-button');if(button){button.title=text;button.setAttribute('aria-label','云同步：'+text);}
   }
@@ -76,23 +77,24 @@
       if(version===generation){setStatus('同步失败：'+(error instanceof TypeError?'无法连接云端':error.message));if(!error.fatal&&retries<3){clearTimeout(timer);timer=setTimeout(sync,[3000,15000,60000][retries++]);}}
     } finally {running=false;if(rerun){rerun=false;clearTimeout(timer);timer=setTimeout(sync,600);}}
   }
-  function open() {
-    document.getElementById('health-sync-key').value=config().key||'';
-    document.getElementById('health-sync-key').type='password';
-    document.getElementById('health-sync-show').textContent='显示';
-    document.getElementById('health-sync-modal').classList.add('open');setStatus(status);
+  function ensureUI(){
+    return ui??=CloudSyncUI.mount(document.body,{dialog:true,id:'health-sync-modal',ids:{url:'health-sync-url',key:'health-sync-key',reveal:'health-sync-show',status:'health-sync-status'},
+      description:'蛋白质记录、断食记录、目标和食材库保存在你自己的 Cloudflare。手机和电脑填写相同的同步密钥，即可同步记录，离线时照常使用。',
+      getConfig:config,onSave:connect,onDisconnect:disconnect,
+      backup:{format:'JSON',accept:'.json,application/json',description:'导出包含摄入、断食、目标和食材库，不包含同步密钥。导入按记录合并，保留本机食材库。',export:()=>exportJSON(),import:event=>importJSON(event)}
+    });
   }
-  function close(){document.getElementById('health-sync-modal').classList.remove('open');document.getElementById('health-sync-key').value='';}
-  function connect() {
-    const key=document.getElementById('health-sync-key').value.trim();
-    if(key.length<24||!/^[\x21-\x7e]+$/.test(key)){setStatus('请填写至少 24 位的专用同步密钥');return;}
-    const old=config();if(old.key&&old.key!==key&&!confirm('更换密钥后会连接新配置，本地记录会保留。继续？'))return;
-    generation++;localStorage.setItem(CONFIG,JSON.stringify({url:old.url,key}));retries=0;sync();
+  function open(){ensureUI().open();ui.setStatus(status);}
+  function close(){ui?.close();}
+  async function connect(next){
+    try{
+      const value=CloudSyncUI.validate(next||{url:document.getElementById('health-sync-url').value,key:document.getElementById('health-sync-key').value});
+      const old=config();if(old.key&&(old.key!==value.key||old.url!==value.url)&&!confirm('更换连接配置后会合并本地与云端记录，继续？'))return;
+      generation++;localStorage.setItem(CONFIG,JSON.stringify(value));retries=0;await sync();
+    }catch(error){setStatus(error.message);throw error;}
   }
-  function disconnect(){generation++;rerun=false;clearTimeout(timer);localStorage.removeItem(CONFIG);document.getElementById('health-sync-key').value='';setStatus('已断开，本机和云端记录均保留');}
-  function reveal(){const el=document.getElementById('health-sync-key');el.type=el.type==='password'?'text':'password';document.getElementById('health-sync-show').textContent=el.type==='password'?'显示':'隐藏';}
-  async function copyKey(){try{await navigator.clipboard.writeText(config().key||'');showToast('同步密钥已复制');}catch{showToast('无法复制，请点显示后手动复制');}}
-  window.HealthCloud={changed,sync,open,close,connect,disconnect,reveal,copyKey};
+  function disconnect(){generation++;rerun=false;clearTimeout(timer);localStorage.removeItem(CONFIG);const input=document.getElementById('health-sync-key');if(input)input.value='';setStatus('已断开，本机和云端记录均保留');}
+  window.HealthCloud={changed,sync,open,close,connect,disconnect};
   capture(localStorage.getItem(STATE)===null);
   window.addEventListener('online',()=>{retries=0;sync();});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){retries=0;sync();}});

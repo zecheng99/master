@@ -5,6 +5,7 @@ import { countdown, todayInSingapore, CATEGORIES, MAX_PINNED, categoryLabel, can
 
 import { api, getConfig, setConfig, checkConfig, loadState, loadCachedState, remember } from './cloud';
 import { Photo } from './photo';
+import { SyncSettings } from './sync-settings';
 import { exportBackup, importBackup } from './backup';
 type State = { wishes: Wish[]; entries: Entry[] };
 type Draft = { id: string; day: string; body: string; files: { id: string; file: File; preview: string }[]; photos: { id: string; entry_id: string }[] };
@@ -32,7 +33,7 @@ function WishCard({wish,index,recordCount,busy,offline,pinnedCount,onOpen,onComp
  </article>;
 }
 export default function JournalApp(){
- const [offline,setOffline]=useState(false);const [cloudUrl,setCloudUrl]=useState(()=>getConfig().url);const [cloudKey,setCloudKey]=useState(()=>getConfig().key);const [showKey,setShowKey]=useState(false);
+ const [offline,setOffline]=useState(false);
  const [data,setData]=useState<State>({wishes:[],entries:[]});const [loading,setLoading]=useState(true);const [loadError,setLoadError]=useState('');
  const [syncing,setSyncing]=useState(false);
  const pinPendingRef=useRef(false);const pinRevisionRef=useRef(0);
@@ -94,11 +95,12 @@ export default function JournalApp(){
   {notice&&<div className="toast" role="status"><CheckCheck size={17}/>{notice}</div>}
   {modal&&<div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)close();}}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title" ref={dialogRef}><div className="modal-head"><span className="eyebrow">{help?'设置':adding?'新心愿':'心愿详情'}</span><button className="icon-button" onClick={close} aria-label="关闭" disabled={busy}><X size={21}/></button></div>
   {help?<><h2 id="dialog-title">云同步与备份</h2><div className="help-copy"><p>心愿和照片保存在你自己的 Cloudflare。手机与电脑填写相同的同步密钥，就能打开同一本手账，无需 ChatGPT 账户。</p></div>
-  <form className="wish-form connection-form" onSubmit={e=>{e.preventDefault();run(async()=>{const config=checkConfig({url:cloudUrl,key:cloudKey});const state=await api<State>('state','GET',undefined,config);setConfig(config);await remember(state,config);setData(state);setOffline(false);setLoadError('');setHelp(false);},'已连接你的私人手账');}}>
-  <label>同步服务地址<input type="url" required value={cloudUrl} onChange={e=>setCloudUrl(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false}/></label>
-  <label>专用同步密钥<input type={showKey?'text':'password'} required minLength={24} value={cloudKey} onChange={e=>setCloudKey(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} placeholder="在其他设备上也填写同一个密钥"/></label>
-  <div className="connection-tools"><button type="button" className="text-button" onClick={()=>setShowKey(!showKey)}>{showKey?'隐藏密钥':'显示密钥'}</button><button type="button" className="text-button" disabled={!cloudKey||busy} onClick={()=>run(async()=>{await navigator.clipboard.writeText(cloudKey);},'密钥已复制，可粘贴到另一台设备')}>复制密钥</button></div>
-  <button className="primary full" disabled={busy}>{busy?<LoaderCircle size={16} className="spin"/>:<RefreshCw size={16}/>}保存并连接</button></form>
+  <SyncSettings getConfig={getConfig} busy={busy} onSave={async value=>{
+    if(busyRef.current)throw new Error('正在保存，请稍候');
+    busyRef.current=true;setBusy(true);setError('');
+    try{const config=checkConfig(value);const state=await api<State>('state','GET',undefined,config);setConfig(config);await remember(state,config);setData(state);setOffline(false);setLoadError('');setHelp(false);setNotice('已连接你的私人手账');}
+    finally{busyRef.current=false;setBusy(false);}
+  }}/>
   <div className="backup-tools"><h3>给回忆留一份备份</h3><p>导出文件包含心愿、心得和照片，不包含同步密钥。导入时按记录编号合并，已有记录保持不变。</p><div><button className="secondary" disabled={busy||!getConfig().key} onClick={()=>run(()=>exportBackup(data),'备份已准备好')}>{busy?<LoaderCircle size={15} className="spin"/>:<ArrowDown size={15}/>}导出完整备份</button><label className={'secondary import-label '+(busy||!getConfig().key||offline?'disabled':'')}><ArrowUp size={15}/>导入备份<input type="file" accept=".json,application/json" disabled={busy||!getConfig().key||offline} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)run(async()=>{await importBackup(file);await reload();},'备份已处理');}}/></label></div></div>
   <div className="help-copy"><h3>添加到手机主屏幕</h3><p>iPhone：Safari → 分享 → 添加到主屏幕。<br/>Android：Chrome 菜单 → 添加到主屏幕 / 安装应用。</p><p>倒计时按新加坡时间更新。联网重新打开会获取新版；离线时可以浏览最近保存的记录。照片需要先在此设备打开才能离线查看。</p><p className="key-note">密钥保存在当前设备。持有密钥的人可以读写手账，请单独保管；云端存储不提供端到端加密。</p></div></>:<><h2 id="dialog-title">{adding?'添加心愿':'编辑心愿'}</h2>
   <form className="wish-form" onSubmit={e=>{e.preventDefault();run(async()=>{const t=counted?Number(target):null;if(counted&&(!Number.isInteger(t)||Number(t)<1))throw new Error('请填写有效的目标次数');if(adding){await api('wishes','POST',{id:newWishId,title,target:t,category});await reload();setAdding(false);setWishDirty(false);}else if(wish){await patch(wish.id,{title,target:t,category,...(wish.completed?{completed_on:completeDay}:{})});setWishDirty(false);}},adding?'新的心愿，已经写下':'心愿已保存');}}><label>我想要…<input autoComplete="off" maxLength={200} required value={title} placeholder="去一个想了很久的地方，学一点新东西…" disabled={busy||offline} onChange={e=>{setTitle(e.target.value);setWishDirty(true);}}/></label><label className="category-field">分类<select id="wish-category" value={category} disabled={busy||offline} onChange={e=>{setCategory(e.target.value as Category);setWishDirty(true);}}>{CATEGORIES.map(c=><option key={c} value={c}>{categoryLabel(c)}</option>)}</select></label><div className="type-selector"><button type="button" className={!counted?'selected':''} disabled={busy||offline} onClick={()=>{setCounted(false);setWishDirty(true);}}><Check size={15}/>一次心愿</button><button type="button" className={counted?'selected':''} disabled={busy||offline} onClick={()=>{setCounted(true);setWishDirty(true);}}><RefreshCw size={14}/>次数目标</button></div>{counted&&<label className="inline-field">想完成<input type="number" min="1" max="100000" required value={target} disabled={busy||offline} onChange={e=>{setTarget(e.target.value);setWishDirty(true);}}/>{wishUnit(title)}</label>}{!!wish?.completed&&<label className="inline-field">实现于<input type="date" required value={completeDay} disabled={busy||offline} onChange={e=>{setCompleteDay(e.target.value);setWishDirty(true);}}/></label>}<button className="primary full" type="submit" disabled={busy||offline||!!draft}>{busy?<LoaderCircle size={17} className="spin"/>:<Check size={16}/>} {adding?'添加心愿':'保存心愿'}</button></form>

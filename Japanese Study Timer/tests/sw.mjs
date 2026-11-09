@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const base='https://zecheng99.github.io/master/Japanese%20Study%20Timer/';
 function runtime(){
- const events={},deleted=[],stored=[];let fail=false;const cache={addAll:async paths=>{stored.push(...paths);},put:async req=>{stored.push(req.url);}};
- const ctx=vm.createContext({URL,Response,self:{location:{href:base+'sw.js',origin:'https://zecheng99.github.io'},addEventListener:(name,fn)=>events[name]=fn,skipWaiting:async()=>{},clients:{claim:async()=>{}}},caches:{open:async()=>cache,keys:async()=>['jp-study-v6','jp-study-v7','thisyear-keep','spendex-keep'],delete:async key=>deleted.push(key),match:async()=>new Response('cached')},fetch:async()=>{if(fail)throw Error('offline');return new Response('new');}});
+ const events={},deleted=[],stored=[];let fail=false;const cache={addAll:async paths=>{stored.push(...paths);},match:async()=>new Response('cached'),put:async req=>{stored.push(req.url);}};
+ const ctx=vm.createContext({URL,Response,self:{location:{href:base+'sw.js',origin:'https://zecheng99.github.io'},addEventListener:(name,fn)=>events[name]=fn,skipWaiting:async()=>{},clients:{claim:async()=>{}}},caches:{open:async()=>cache,keys:async()=>['jp-study-v6','jp-study-v8','thisyear-keep','spendex-keep'],delete:async key=>deleted.push(key),match:async()=>new Response('cached')},fetch:async()=>{if(fail)throw Error('offline');return new Response('new');}});
  vm.runInContext(readFileSync(new URL('../sw.js',import.meta.url),'utf8'),ctx);
  return {events,deleted,stored,offline(){fail=true;},async event(name,request){let promise;const pending=[];events[name]({request,waitUntil:p=>pending.push(p),respondWith:p=>promise=p});const response=promise?await promise:null;await Promise.all(pending);return response;}};
 }

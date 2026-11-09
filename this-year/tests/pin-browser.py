@@ -90,7 +90,9 @@ def pinned():
 
 try:
     config = {"url": base, "key": "local-test-only-key-123456789"}
-    ev('localStorage.setItem("thisyear_connection_v1",' + json.dumps(json.dumps(config)) + ');true')
+    wait('!!document.querySelector(".cs-form")')
+    ev('document.querySelector("#cloud-sync-url").value=' + json.dumps(base) + ';document.querySelector("#cloud-sync-key").value=' + json.dumps(config["key"]) + ';document.querySelector(".cs-form").requestSubmit();true')
+    wait('!document.querySelector(".modal")')
     call("/navigate?target=" + target + "&url=" + base + "/master/this-year/")
     wait('!!document.querySelector("#tab-all")')
     ev('document.querySelector("#tab-all").click();true')

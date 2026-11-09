@@ -878,100 +878,9 @@ body {
 
 .tf-actions .btn { flex: 1; }
 
-/* Cloud sync */
-/* 配好之后地址和密钥就该收起来：平时只留一行状态，改的时候才展开 */
-.sync-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 2px 0;
-  background: none;
-  border: none;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.sync-summary-action {
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--accent);
-}
-
-.sync-detail {
-  margin-top: 12px;
-  border-top: 1px solid var(--sep);
-}
-
-.sync-field {
-  padding: 11px 0;
-  border-bottom: 1px solid var(--sep);
-}
-
-.sync-field:last-of-type { border-bottom: none; }
-
-.sync-field label {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--label2);
-  margin-bottom: 6px;
-}
-
-/* 标签和「显示/隐藏」同一行；label 的下边距挪到这层，免得点按钮时连带聚焦输入框 */
-.sync-field-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.sync-field-head label { margin-bottom: 0; }
-
-.sync-reveal {
-  padding: 0;
-  background: none;
-  border: none;
-  font-family: inherit;
-  font-size: 12px;
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.sync-input {
-  width: 100%;
-  padding: 9px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--sep);
-  font-size: 16px;          /* 小于 16px 时 iOS 会自动放大页面 */
-  font-family: inherit;
-  background: var(--bg);
-  color: var(--label);
-  outline: none;
-}
-
-.sync-input:focus { border-color: var(--accent-light); }
-
-.sync-state {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--label);
-}
-
-/* Worker 地址只在这里露一次，且只露主机名——完整地址对日常使用没意义 */
-.sync-host {
-  display: block;
-  margin-top: 3px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--label3);
-  word-break: break-all;
-}
-
+/* Cloud sync overview; the settings panel is shared across apps. */
+.sync-overview{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;border:0;background:none;text-align:left;font:inherit;cursor:pointer;color:var(--label)}
+.sync-overview small{display:block;color:var(--label2);font-size:12px;margin-top:5px}
 /* Toast */
 .toast {
   position: fixed;
@@ -1077,7 +986,7 @@ body {
 <body>
 
 <header class="header">
-  <h1>跡</h1>
+  <div style="display:flex;justify-content:space-between;align-items:center"><h1>跡</h1><button type="button" class="cs-trigger" onclick="toggleSyncCfg()" aria-label="云同步与备份">☁ 云同步</button></div>
   <p class="header-sub" id="headerSub">日々の学びを、ここに刻む</p>
   <button class="timer-bar" id="timerBar" onclick="expandTimer()">
     <span class="tb-dot" id="tbDot"></span>
@@ -1198,35 +1107,8 @@ body {
   </div>
 
   <div class="settings-section">
-    <h3>云同步</h3>
-    <div class="card">
-      <div class="card-inner">
-        <button type="button" class="sync-summary" id="syncSummary" onclick="toggleSyncCfg()">
-          <span>
-            <span class="sync-state" id="syncState"></span>
-            <span class="sync-host" id="syncHost"></span>
-          </span>
-          <span class="sync-summary-action" id="syncSummaryAction">修改</span>
-        </button>
-        <div class="sync-detail" id="syncDetail" hidden>
-          <div class="sync-field">
-            <label for="syncUrl">同步服务地址（已预填）</label>
-            <input class="sync-input" id="syncUrl" placeholder="https://jp-study-sync.zechengyu90.workers.dev"
-                   autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
-          </div>
-          <div class="sync-field">
-            <div class="sync-field-head">
-              <label for="syncToken">同步密钥</label>
-              <button type="button" class="sync-reveal" id="syncReveal" onclick="toggleTokenReveal()">显示</button>
-            </div>
-            <input class="sync-input" id="syncToken" type="password" placeholder="填写专用同步密钥，多台设备使用同一个"
-                   autocapitalize="off" autocorrect="off" spellcheck="false">
-          </div>
-          <button class="btn btn-outline btn-block" style="margin-top:12px" onclick="saveSyncCfg()">保存并同步</button>
-          <p style="font-size:12px;color:var(--label2);margin-top:10px;line-height:1.6">学习记录和目标自动同步，离线记录会在联网后补传。正在进行的计时只保存在本机。密钥仅保存在当前浏览器；持有密钥的人可以读写云端记录。</p>
-        </div>
-      </div>
-    </div>
+    <h3>云同步与备份</h3>
+    <div class="card"><div class="card-inner"><button type="button" class="sync-overview" onclick="toggleSyncCfg()"><span>云同步<small id="syncOverviewStatus"></small></span><span style="color:var(--accent)">设置 ›</span></button></div></div>
   </div>
 
   <div class="settings-section">
@@ -1303,6 +1185,7 @@ body {
   </div>
 </div>
 
+<script src="../shared/cloud-sync-ui.js"></script>
 <script>
 // ── Date Helpers ─────────────────────────────────────────────
 function todayStr() {
@@ -2408,60 +2291,25 @@ function syncStateText() {
   return `上次同步 ${today ? '' : `${d.getMonth()+1}月${d.getDate()}日 `}${hm}`;
 }
 
+let syncUI = null;
 function setSyncStateText(msg) {
-  const el = document.getElementById('syncState');
-  if (el) el.textContent = msg || syncStateText();
+  const text=msg||syncStateText();
+  const el=document.getElementById('syncOverviewStatus');if(el)el.textContent=text;
+  syncUI?.setStatus(text,!!syncErr);
 }
-
-// 没配过就直接摊开——第一次进来得看见输入框；配好之后默认收起
-let syncCfgOpen = !syncOn();
-
-function toggleSyncCfg() {
-  syncCfgOpen = !syncCfgOpen;
-  applySyncCfgUI();
+function ensureSyncUI(){
+  return syncUI??=CloudSyncUI.mount(document.body,{dialog:true,id:'jp-sync-modal',ids:{url:'syncUrl',key:'syncToken',reveal:'syncReveal',status:'syncState'},
+    description:'学习记录和目标保存在你自己的 Cloudflare。手机和电脑填写相同的同步密钥即可同步；正在进行的计时只保留在本机。',
+    getConfig:()=>({url:syncCfg().url,key:syncCfg().token}),onSave:saveSyncCfg,
+    backup:{format:'CSV',accept:'.csv,text/csv',description:'导出学习记录，不包含同步密钥。导入时合并已有记录。',export:()=>exportCSV(),import:event=>importCSV(event)}
+  });
 }
+function toggleSyncCfg(){ensureSyncUI().open();setSyncStateText();}
+function loadSyncCfg(){setSyncStateText();}
 
-function toggleTokenReveal() {
-  const el = document.getElementById('syncToken');
-  const hidden = el.type === 'password';
-  el.type = hidden ? 'text' : 'password';
-  document.getElementById('syncReveal').textContent = hidden ? '隐藏' : '显示';
-}
-
-// 只露主机名。地址填坏了 URL() 会抛，那就原样显示，让人看得出哪里不对
-function syncHost() {
-  const url = syncCfg().url;
-  if (!url) return '';
-  try { return new URL(url).host; } catch(e) { return url; }
-}
-
-function applySyncCfgUI() {
-  document.getElementById('syncDetail').hidden = !syncCfgOpen;
-  document.getElementById('syncSummaryAction').textContent =
-    syncCfgOpen ? '收起' : (syncOn() ? '修改' : '设置');
-  // 收起时地址退回主机名，密钥退回打码——截图漏出去的就只剩一行状态
-  document.getElementById('syncHost').textContent = syncCfgOpen ? '' : syncHost();
-  if (!syncCfgOpen) {
-    document.getElementById('syncToken').type = 'password';
-    document.getElementById('syncReveal').textContent = '显示';
-  }
-}
-
-function loadSyncCfg() {
-  const c = syncCfg();
-  // 后台同步会带着 renderAll 一起回来，正在输入的框不能被回填顶掉
-  const ae = document.activeElement;
-  if (!ae || (ae.id !== 'syncUrl' && ae.id !== 'syncToken')) {
-    document.getElementById('syncUrl').value = c.url;
-    document.getElementById('syncToken').value = c.token;
-  }
-  applySyncCfgUI();
-  setSyncStateText();
-}
-
-function saveSyncCfg() {
-  const url = (document.getElementById('syncUrl').value.trim() || SYNC_DEFAULT_URL).replace(/\/+$/, '');
-  const token = document.getElementById('syncToken').value.trim();
+async function saveSyncCfg(value) {
+  const url = (value?.url || document.getElementById('syncUrl').value.trim() || SYNC_DEFAULT_URL).replace(/\/+$/, '');
+  const token = (value?.key || document.getElementById('syncToken').value).trim();
   try {
     const parsed = new URL(url);
     if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/' ||
@@ -2480,9 +2328,8 @@ function saveSyncCfg() {
   localStorage.setItem(SYNC_URL_KEY, url);
   localStorage.setItem(SYNC_TOKEN_KEY, token);
   if (!syncOn()) { loadSyncCfg(); showToast('地址和密钥都要填'); return; }
-  syncCfgOpen = false;   // 配好了就收起来，别让密钥一直挂在设置页上
   loadSyncCfg();
-  doSync({ manual: true });
+  await doSync({ manual: true });
 }
 
 let toastTimer = null;
