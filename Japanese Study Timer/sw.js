@@ -1,27 +1,25 @@
-const CACHE = 'jp-study-v6';
-const ASSETS = ['./', './index.html', './manifest.json'];
+const PREFIX = 'jp-study-';
+const CACHE = PREFIX + 'v7';
+const BASE = new URL('./', self.location.href).pathname;
+const ASSETS = [BASE, ...['index.html', 'manifest.json', 'apple-touch-icon.png', 'Icon%201024.png'].map(path => BASE + path)];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
-
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  e.waitUntil(caches.keys().then(keys => Promise.all(
+    keys.filter(key => key.startsWith(PREFIX) && key !== CACHE).map(key => caches.delete(key))
+  )).then(() => self.clients.claim()));
 });
-
-// network-first：在线永远拿最新版，离线回退到最近一次成功加载的缓存
 self.addEventListener('fetch', e => {
-  e.respondWith(
-    fetch(e.request).then(r => {
-      const clone = r.clone();
-      caches.open(CACHE).then(c => c.put(e.request, clone));
-      return r;
-    }).catch(() => caches.match(e.request))
-  );
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin ||
+      !ASSETS.includes(url.pathname) || e.request.headers.has('Authorization')) return;
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(response => {
+    if (response.ok) {
+      const clone = response.clone();
+      e.waitUntil(caches.open(CACHE).then(cache => cache.put(e.request, clone)));
+    }
+    return response;
+  }).catch(async () => await caches.match(e.request) || Response.error()));
 });

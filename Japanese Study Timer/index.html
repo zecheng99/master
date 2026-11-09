@@ -1210,8 +1210,8 @@ body {
         </button>
         <div class="sync-detail" id="syncDetail" hidden>
           <div class="sync-field">
-            <label for="syncUrl">Worker 地址</label>
-            <input class="sync-input" id="syncUrl" placeholder="https://jp-study-sync.xxx.workers.dev"
+            <label for="syncUrl">同步服务地址（已预填）</label>
+            <input class="sync-input" id="syncUrl" placeholder="https://jp-study-sync.zechengyu90.workers.dev"
                    autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
           </div>
           <div class="sync-field">
@@ -1219,10 +1219,11 @@ body {
               <label for="syncToken">同步密钥</label>
               <button type="button" class="sync-reveal" id="syncReveal" onclick="toggleTokenReveal()">显示</button>
             </div>
-            <input class="sync-input" id="syncToken" type="password" placeholder="部署时设的 SYNC_KEY"
+            <input class="sync-input" id="syncToken" type="password" placeholder="填写专用同步密钥，多台设备使用同一个"
                    autocapitalize="off" autocorrect="off" spellcheck="false">
           </div>
           <button class="btn btn-outline btn-block" style="margin-top:12px" onclick="saveSyncCfg()">保存并同步</button>
+          <p style="font-size:12px;color:var(--label2);margin-top:10px;line-height:1.6">学习记录和目标自动同步，离线记录会在联网后补传。正在进行的计时只保存在本机。密钥仅保存在当前浏览器；持有密钥的人可以读写云端记录。</p>
         </div>
       </div>
     </div>
@@ -2199,6 +2200,7 @@ function importCSV(event) {
    可能吞掉一段正在计的时间。停表存成 session 之后自然就同步过去了。 */
 
 const SYNC_URL_KEY   = 'jp-sync-url';
+const SYNC_DEFAULT_URL = 'https://jp-study-sync.zechengyu90.workers.dev';
 const SYNC_TOKEN_KEY = 'jp-sync-token';
 const SYNC_AT_KEY    = 'jp-sync-at';    // 上次同步拿到的服务器时间，增量拉取的游标
 const SYNC_SNAP_KEY  = 'jp-sync-snap';  // id → 内容 hash，用来算「哪几条改过」
@@ -2211,6 +2213,7 @@ const SYNC_TIMEOUT = 20000;  // 挂死的请求必须自己断，见 doSync 里�
 
 let syncSnap     = (() => { try { return JSON.parse(localStorage.getItem(SYNC_SNAP_KEY)) || {}; } catch(e) { return {}; } })();
 let syncing      = false;
+let syncAgain    = false;
 let syncTimer    = null;
 let syncErr      = '';
 let syncRetry    = 0;      // 连续失败次数，即 SYNC_BACKOFF 的下标。成功或换个由头重来就清零
@@ -2222,7 +2225,7 @@ function syncFail(msg, fatal) { const e = new Error(msg); e.fatal = !!fatal; ret
 
 function syncCfg() {
   return {
-    url:   (localStorage.getItem(SYNC_URL_KEY) || '').trim().replace(/\/+$/, ''),
+    url:   (localStorage.getItem(SYNC_URL_KEY) || SYNC_DEFAULT_URL).trim().replace(/\/+$/, ''),
     token: (localStorage.getItem(SYNC_TOKEN_KEY) || '').trim(),
   };
 }
@@ -2285,7 +2288,7 @@ function scheduleSync(delay = 2500) {
 async function doSync(opts = {}) {
   const manual = !!opts.manual;
   if (!syncOn())         { if (manual) showToast('还没设置云同步'); return; }
-  if (syncing)           { if (manual) showToast('正在同步…'); return; }
+  if (syncing)           { syncAgain = true; if (manual) showToast('正在同步…'); return; }
   if (!navigator.onLine) { if (manual) showToast('当前没有网络'); return; }
   // 编辑弹窗开着的时候拉到新数据会重绘列表，打断操作，等一会儿再说
   if (!manual && editingId) { scheduleSync(8000); return; }
@@ -2331,6 +2334,9 @@ async function doSync(opts = {}) {
     // 其余 4xx 是这个请求本身有问题，重发一模一样的内容不会有别的结果
     if (!res.ok) throw syncFail('服务端 ' + res.status, res.status < 500 && res.status !== 429);
     const out = await res.json();
+    // A reply from the old connection must not update the new connection's cursor or records.
+    const currentCfg = syncCfg();
+    if (cfg.url !== currentCfg.url || cfg.token !== currentCfg.token) { syncAgain = true; return; }
 
     // 推成功了快照才跟上。失败就原样留着，下次整批重推——宁可重推也不能漏推
     for (const d of dirty) {
@@ -2387,6 +2393,7 @@ async function doSync(opts = {}) {
     setSyncStateText();
   } finally {
     syncing = false;
+    if (syncAgain) { syncAgain = false; scheduleSync(600); }
   }
 }
 
@@ -2453,13 +2460,20 @@ function loadSyncCfg() {
 }
 
 function saveSyncCfg() {
-  const url = document.getElementById('syncUrl').value.trim().replace(/\/+$/, '');
+  const url = (document.getElementById('syncUrl').value.trim() || SYNC_DEFAULT_URL).replace(/\/+$/, '');
   const token = document.getElementById('syncToken').value.trim();
+  try {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/' ||
+        (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && ['localhost','127.0.0.1'].includes(parsed.hostname)))) throw new Error();
+  } catch { showToast('请填写有效的 HTTPS 同步服务地址'); return; }
+  if (token.length < 24) { showToast('请填写至少 24 个字符的同步密钥'); return; }
   // 换了地址或密钥就当新设备：游标和快照归零，下次走全量拉取
   const c = syncCfg();
   if (url !== c.url || token !== c.token) {
     localStorage.removeItem(SYNC_AT_KEY);
     localStorage.removeItem(SYNC_SNAP_KEY);
+    localStorage.removeItem(SYNC_SETH_KEY);
     syncSnap = {};
     syncErr = '';
   }

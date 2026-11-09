@@ -16,6 +16,7 @@
 
 // GitHub Pages 正式域 + 本地调试。其它来源一律回落到正式域，等于拒绝跨域读取。
 const ALLOWED_ORIGINS = [
+  'https://zecheng99.github.io',
   'https://shelvee11.github.io',
   'http://localhost:8000',
   'http://127.0.0.1:8000',
@@ -38,7 +39,7 @@ function cors(origin) {
 function json(body, status, headers) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
   });
 }
 

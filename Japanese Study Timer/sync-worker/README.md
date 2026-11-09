@@ -63,7 +63,7 @@ npx wrangler deploy
 
 ## 开启同步
 
-在手机和电脑上分别打开跡 → 设置 → 「云同步」→ 填两样东西：
+在手机和电脑上分别打开跡 → 设置 → 「云同步」。服务地址已预填，只需填写各设备共用的专用同步密钥：
 
 - **Worker 地址**：第 7 步输出的那个 `https://...workers.dev`
 - **同步密钥**：第 5 步生成的那串
@@ -83,7 +83,7 @@ npx wrangler deploy
 一上来就把设好的目标冲回默认的 30 分钟 / 6 天）。
 
 **换了域名要改白名单。** `src/index.js` 顶部的 `ALLOWED_ORIGINS` 写死了
-`https://shelvee11.github.io`。换托管地址的话要加进去再重新 `npx wrangler deploy`，
+`https://zecheng99.github.io` 和兼容的旧域名 `https://shelvee11.github.io`。换托管地址的话要加进去再重新 `npx wrangler deploy`，
 否则浏览器会拦跨域请求。
 
 **「清除所有数据」只清本机。** 云端不受影响，下次同步还会拉回来。真想清云端得直接
@@ -120,3 +120,11 @@ npx wrangler dev --port 8788                                # 起本地服务
 本地密钥写在 `.dev.vars`（已 gitignore）。前端的 CORS 白名单里留了
 `http://localhost:8000`，所以本地可以 `python3 -m http.server 8000` 起前端联调，
 在设置页把 Worker 地址填成 `http://127.0.0.1:8788`。
+
+## 验证
+
+在仓库根目录执行 `node --test "Japanese Study Timer/tests/"*.mjs`，使用内存 SQLite 验证双设备合并、编辑和删除、离线补传、目标同步、错误重试、配置切换、鉴权和 CORS，并检查 Service Worker 在线更新、离线回退与缓存隔离。
+
+启动 web-access CDP Proxy 后运行 `python3 "Japanese Study Timer/tests/browser.py"`。它会启动临时本地静态服务，在独立测试页面中模拟同步响应，验证设置、密钥隐藏、历史记录上传、远端合并、离线补传和本地计时保留；不会访问生产同步 API。
+
+密钥不会预填或写入公开源码。服务端继续使用已有 Cloudflare Secret，浏览器只在本机保存用户配置。更新无需卸载应用，也不清空已有学习记录。
