@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+const compile=s=>ts.transpileModule(s,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+const yearUrl='data:text/javascript;base64,'+Buffer.from(compile(readFileSync(new URL('../src/year.ts',import.meta.url),'utf8'))).toString('base64');
+const workerCode=compile(readFileSync(new URL('../sync-worker/src/index.ts',import.meta.url),'utf8')).replaceAll("'../../src/year'",JSON.stringify(yearUrl));
+const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(workerCode).toString('base64'));
+const sqlite=new DatabaseSync(':memory:');sqlite.exec(readFileSync(new URL('../sync-worker/schema.sql',import.meta.url),'utf8'));
+const statement=(sql,args=[])=>({bind(...values){return statement(sql,values);},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){const r=sqlite.prepare(sql).run(...args);return {meta:{changes:Number(r.changes)}};}});
+const objects=new Map();
+const env={DB:{prepare:statement,async batch(list){sqlite.exec('BEGIN');try{const r=[];for(const s of list)r.push(await s.all());sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}},BUCKET:{async put(key,bytes,metadata){objects.set(key,{bytes,mime:metadata.httpMetadata.contentType});},async get(key){const v=objects.get(key);return v?{body:new Blob([v.bytes]).stream()}:null;},async delete(keys){for(const k of Array.isArray(keys)?keys:[keys])objects.delete(k);}},SYNC_KEY:'test-key-only-never-used-on-production-123'};
+async function request(path,method='GET',body,status=200,extra={}){
+ const req=new Request('https://worker.test/api/'+path,{method,headers:{Origin:'http://127.0.0.1:8000',Authorization:'Bearer '+env.SYNC_KEY,...(body instanceof FormData?{}:body?{'Content-Type':'application/json'}:{}),...extra},body:body instanceof FormData?body:body?JSON.stringify(body):undefined});
+ const r=await worker.fetch(req,env);const text=await r.text();assert.equal(r.status,status,`${method} ${path}: ${text.slice(0,150)}`);if(!text)return;try{return JSON.parse(text);}catch{return text;}
+}
+await request('state','GET',undefined,401,{Authorization:''});await request('state','GET',undefined,401,{Authorization:'Bearer wrong-key'});
+await request('state','OPTIONS',undefined,204,{Authorization:''});await request('state','GET',undefined,403,{Origin:'https://untrusted.example'});
+const first=await request('state');assert.equal(first.wishes.length,11);assert.deepEqual((await request('state')).wishes,first.wishes);
+const wid=crypto.randomUUID(),eid=crypto.randomUUID();
+await request('wishes','POST',{id:wid,title:'测试心愿',target:3},201);await request('wishes','POST',{id:wid,title:'测试心愿',target:3});assert.equal((await request('state')).wishes.length,12);
+await request('wishes/'+wid,'PATCH',{progress:3});let w=(await request('state')).wishes.find(w=>w.id===wid);assert.equal(w.completed,1);assert.ok(w.completed_on);
+await request('wishes/'+wid,'PATCH',{completed_on:'2026-12-01'});assert.equal((await request('state')).wishes.find(w=>w.id===wid).completed_on,'2026-12-01');
+await request('wishes/'+wid,'PATCH',{progress:2});w=(await request('state')).wishes.find(w=>w.id===wid);assert.equal(w.completed,0);assert.equal(w.completed_on,null);
+await request('wishes/'+wid,'PATCH',{completed:true});await request('wishes/'+wid,'PATCH',{completed:false});assert.equal((await request('state')).wishes.find(w=>w.id===wid).progress,2);
+await request('wishes/'+wid+'/move','PATCH',{direction:'up'});assert.equal((await request('state')).wishes.at(-2).id,wid);
+await request('entries/'+eid,'PUT',{wish_id:wid,day:'2026-11-09',body:'记录一刻'});await request('entries/'+eid,'PUT',{wish_id:wid,day:'2026-11-10',body:'修改心得'});
+await request('entries/'+crypto.randomUUID(),'PUT',{wish_id:wid,day:'2026-02-30',body:'错误日期'},400);
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jE1sAAAAASUVORK5CYII=','base64');
+const form=(id,data=png)=>{const f=new FormData();f.append('id',id);f.append('file',new File([data],'photo.png',{type:'image/png'}));return f;};const photoIds=Array.from({length:10},()=>crypto.randomUUID());
+await request('entries/'+eid+'/photos','POST',form(crypto.randomUUID(),Buffer.from('invalid')),400);
+for(let i=0;i<9;i++)await request('entries/'+eid+'/photos','POST',form(photoIds[i]),201);
+await request('entries/'+eid+'/photos','POST',form(photoIds[0]));await request('entries/'+eid+'/photos','POST',form(photoIds[9]),400);assert.equal(objects.size,9);
+const photo=await worker.fetch(new Request('https://worker.test/api/photos/'+photoIds[0],{headers:{Authorization:'Bearer '+env.SYNC_KEY}}),env);assert.equal(photo.status,200);assert.deepEqual(Buffer.from(await photo.arrayBuffer()),png);
+await request('photos/'+photoIds[0],'GET',undefined,401,{Authorization:''});await request('photos/'+photoIds[0],'DELETE');await request('entries/'+eid+'/photos','POST',form(photoIds[9]),201);
+const record=(await request('state')).entries.find(e=>e.id===eid);assert.equal(record.body,'修改心得');assert.equal(record.photos.length,9);
+sqlite.exec("INSERT INTO wishes(id,owner,title,position)VALUES('foreign-wish','other','其他用户',0);INSERT INTO entries(id,wish_id,owner,day,body)VALUES('foreign-entry','foreign-wish','other','2026-11-09','私密');INSERT INTO photos(id,entry_id,owner,object_key,mime)VALUES('foreign-photo','foreign-entry','other','other/key','image/png');");
+await request('wishes/foreign-wish','PATCH',{title:'越权修改'},404);await request('wishes/foreign-wish','DELETE',undefined,404);await request('entries/foreign-entry','PUT',{wish_id:wid,day:'2026-11-09',body:'越权修改'},404);await request('entries/foreign-entry','DELETE',undefined,404);await request('photos/foreign-photo','GET',undefined,404);await request('photos/foreign-photo','DELETE',undefined,404);
+await request('wishes/'+wid,'DELETE');assert.equal(objects.size,0);assert.equal((await request('state')).entries.length,0);
+for(const w of (await request('state')).wishes)await request('wishes/'+w.id,'DELETE');assert.equal((await request('state')).wishes.length,0);
+console.log('PASS: key auth, CORS, one-time seeds, retry IDs, count/completion, dates, reorder, journals, photo format/bytes/limit, ownership and cascades');
+sqlite.close();

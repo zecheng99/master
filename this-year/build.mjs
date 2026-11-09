@@ -1,0 +1,14 @@
+import {build} from 'vite';
+import {readFile,writeFile,cp,readdir,unlink} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+await build();
+await cp(new URL('.build/',import.meta.url),new URL('./',import.meta.url),{recursive:true});
+const html=await readFile(new URL('index.html',import.meta.url),'utf8');
+const base='/master/this-year/';
+const assets=[base,base+'index.html',base+'manifest.json',base+'favicon.svg',base+'icon-192.png',base+'icon-512.png',base+'apple-touch-icon.png',...Array.from(html.matchAll(/(?:src|href)="(\/master\/this-year\/assets\/[^"]+)"/g),m=>m[1])];
+const hash=createHash('sha256');for(const path of assets.filter(p=>p!==base))hash.update(await readFile(new URL(path.slice(base.length),import.meta.url)));
+const version=hash.digest('hex').slice(0,14);
+const used=new Set(assets.map(p=>p.split('/').at(-1)));
+for(const file of await readdir(new URL('assets/',import.meta.url))) if(/^index-.*\.(js|css)$/.test(file)&&!used.has(file))await unlink(new URL('assets/'+file,import.meta.url));
+await writeFile(new URL('service-worker.js',import.meta.url),`const PREFIX='thisyear-';\nconst CACHE=PREFIX+${JSON.stringify(version)};\nconst ASSETS=${JSON.stringify(assets)};\nself.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});\nself.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith(PREFIX)&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});\nself.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin||!ASSETS.includes(u.pathname)||e.request.headers.has('Authorization'))return;e.respondWith(fetch(e.request,{cache:'no-cache'}).then(r=>{if(r.ok){const clone=r.clone();e.waitUntil(caches.open(CACHE).then(c=>c.put(e.request,clone)));}return r;}).catch(async()=>await caches.match(e.request)||Response.error()));});\n`);
+console.log(`PWA service worker: ${version}, ${assets.length} static resources`);

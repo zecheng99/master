@@ -1,0 +1,11 @@
+node_modules/
+.dev.vars*
+.env*
+.wrangler/
+sync-worker/.wrangler/
+sync-worker/wrangler.toml
+sync-worker/.dev.vars*
+sync-worker/migration-private.sql
+.local-connection.json
+*.tsbuildinfo
+.build/

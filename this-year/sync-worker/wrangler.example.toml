@@ -1,0 +1,14 @@
+name = "this-year-sync"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+account_id = "YOUR_ACCOUNT_ID"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "this-year"
+database_id = "YOUR_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "this-year-photos"
