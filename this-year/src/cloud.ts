@@ -9,14 +9,15 @@ export function checkConfig(c:Config):Config {const u=new URL(c.url.trim());if(u
 export class CloudError extends Error{constructor(message:string,public status=0){super(message);}}
 export async function requestRaw(path:string,method='GET',body?:unknown,config=getConfig()){
  if(!config.key)throw new CloudError('请先在“云同步与备份”中连接你的手账',401);
- const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),45000);
+ const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),path==='state'&&method==='GET'?12000:45000);
  try{const response=await fetch(config.url+'/api/'+path,{method,cache:'no-store',signal:controller.signal,headers:{Authorization:'Bearer '+config.key,...(body instanceof FormData?{}:body?{'Content-Type':'application/json'}:{})},body:body instanceof FormData?body:body?JSON.stringify(body):undefined});if(!response.ok){let data:{error?:string}={};try{data=await response.json();}catch{}throw new CloudError(response.status===401?'同步密钥不正确，请到设置检查':data.error||`请求失败（${response.status}），请重试`,response.status);}return response;}
  catch(e){if(e instanceof CloudError)throw e;throw new CloudError('网络连接暂时不可用，内容已保留，请联网后重试');}finally{clearTimeout(timeout);}
 }
 export async function api<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,config=getConfig()):Promise<T>{return (await requestRaw(path,method,body,config)).json() as Promise<T>;}
 async function tag(config=getConfig()){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(config.url+'|'+config.key));return Array.from(new Uint8Array(bytes)).map(n=>n.toString(16).padStart(2,'0')).join('');}
 export async function remember(state:State,config=getConfig()){try{localStorage.setItem(SNAPSHOT,JSON.stringify({tag:await tag(config),state}));}catch{/* Cloud records are already saved even if this device has no cache space. */}}
-export async function loadState(){try{const state=await api<State>('state');return {state,offline:false};}catch(e){if(e instanceof CloudError&&(e.status===401||e.status===403))throw e;try{const saved=JSON.parse(localStorage.getItem(SNAPSHOT)||'null');if(saved?.tag===await tag()&&saved.state?.wishes&&saved.state?.entries)return {state:saved.state as State,offline:true};}catch{}throw e;}}
+export async function loadCachedState():Promise<State|null>{try{const saved=JSON.parse(localStorage.getItem(SNAPSHOT)||'null');if(getConfig().key&&saved?.tag===await tag()&&Array.isArray(saved.state?.wishes)&&Array.isArray(saved.state?.entries))return saved.state as State;}catch{}return null;}
+export async function loadState(){try{const state=await api<State>('state');return {state,offline:false};}catch(e){if(e instanceof CloudError&&(e.status===401||e.status===403))throw e;const state=await loadCachedState();if(state)return {state,offline:true};throw e;}}
 let database:Promise<IDBDatabase>|undefined;
 function photoDB(){return database??=new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('thisyear_private_photos_v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('photos');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function cachedPhoto(key:string):Promise<Blob|undefined>{try{const db=await photoDB();return await new Promise((resolve,reject)=>{const r=db.transaction('photos').objectStore('photos').get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}catch{return undefined;}}

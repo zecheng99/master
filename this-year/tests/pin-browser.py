@@ -96,6 +96,30 @@ try:
     ev('document.querySelector("#tab-all").click();true')
     wait('!!document.querySelector(".pin-button")')
     wait('!!localStorage.getItem("thisyear_snapshot_v1")')
+    # Cached wishes must render and open while the startup request is still blocked.
+    control["hold_read"] = True
+    read_gate.clear()
+    read_started.clear()
+    state["wishes"][0]["title"] = "云端更新后的心愿"
+    begin = time.monotonic()
+    call("/navigate?target=" + target + "&url=" + base + "/master/this-year/")
+    wait('!!document.querySelector("#tab-all")')
+    ev('document.querySelector("#tab-all").click();true')
+    wait('!!document.querySelector(".wish-card")', 1)
+    assert read_started.wait(3)
+    assert ev('document.querySelector(".wish-card h3").textContent') == "测试心愿"
+    assert ev('document.querySelector(".pin-button").disabled')
+    assert ev('document.querySelector(".top-note").textContent') == "同步中"
+    ev('document.querySelector(".wish-content").click();true')
+    wait('!!document.querySelector(".detail-pin button")', 1)
+    assert ev('document.querySelector(".detail-pin button").disabled')
+    ev('document.querySelector("[aria-label=关闭]").click();true')
+    read_gate.set()
+    wait('!document.querySelector(".pin-button").disabled')
+    assert ev('document.querySelector(".wish-card h3").textContent') == "云端更新后的心愿"
+    print("PASS: cached startup and detail open before network reply; read-only until fresh state arrives")
+    read_gate.clear()
+    read_started.clear()
     initial_reads = control["state_reads"]
     # Hold an old read until AFTER the pin commits, then verify it cannot revert the UI/cache.
     control["hold_read"] = True
@@ -141,6 +165,12 @@ try:
     wait('!!document.querySelector(".offline-banner")')
     assert ev('JSON.parse(localStorage.thisyear_connection_v1).key') == config["key"]
     print("PASS: successful unpin, offline snapshot fallback, connection settings preserved")
+    config["key"] = "different-local-key-123456789"
+    ev('localStorage.setItem("thisyear_connection_v1",' + json.dumps(json.dumps(config)) + ');true')
+    call("/navigate?target=" + target + "&url=" + base + "/master/this-year/")
+    wait('document.body.textContent.includes("offline")')
+    assert ev('document.querySelectorAll(".wish-card").length') == 0
+    print("PASS: a different connection cannot reuse the previous connection snapshot")
 finally:
     gate.set()
     read_gate.set()
