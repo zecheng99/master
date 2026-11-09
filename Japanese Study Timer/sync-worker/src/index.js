@@ -82,7 +82,8 @@ export default {
         env.DB.prepare(
           `INSERT INTO sessions (id, data, updated, deleted) VALUES (?1, ?2, ?3, ?4)
            ON CONFLICT(id) DO UPDATE SET
-             data = excluded.data, updated = excluded.updated, deleted = excluded.deleted`
+             data = excluded.data, updated = excluded.updated, deleted = excluded.deleted
+           WHERE sessions.deleted = 0 OR excluded.deleted = 1`
         ).bind(r.id, r.deleted ? '' : String(r.data || ''), now, r.deleted ? 1 : 0)
       );
     }
@@ -113,7 +114,18 @@ export default {
        WHERE updated > ?1 ORDER BY updated LIMIT ?2`
     ).bind(since, PULL_LIMIT).all();
 
-    const rows = results || [];
+    // An offline device can upload an old copy after it was deleted elsewhere.
+    // Keep tombstones final and send them even when they predate that device's cursor.
+    const removed = [];
+    const liveIds = [...new Set(incoming.filter(r => r && !r.deleted && typeof r.id === 'string' && r.id).map(r => r.id))];
+    for (let i = 0; i < liveIds.length; i += MAX_BATCH) {
+      const ids = liveIds.slice(i, i + MAX_BATCH);
+      const found = await env.DB.prepare(
+        `SELECT id, data, updated, deleted FROM sessions WHERE deleted = 1 AND id IN (${ids.map(() => '?').join(',')})`
+      ).bind(...ids).all();
+      removed.push(...(found.results || []));
+    }
+    const rows = [...new Map([...(results || []), ...removed].map(row => [row.id, row])).values()];
 
     // 刚推上来的那几条会因为 updated = now 落进上面的结果里。过滤掉不是省流量而已：
     // 它们的内容就是客户端自己刚发的，原样回传没有意义。别的设备在 since~now 之间
@@ -133,11 +145,11 @@ export default {
     return json({
       now,
       sessions: rows
-        .filter(r => !pushed.has(r.id))
+        .filter(r => r.deleted || !pushed.has(r.id))
         .map(r => ({ id: r.id, data: r.data, deleted: r.deleted ? 1 : 0 })),
       settings: setRow ? setRow.v : null,
       // 顶到 LIMIT 说明这批没拉完，客户端要立刻再同步一次，否则会静默漏数据
-      truncated: rows.length >= PULL_LIMIT,
+      truncated: (results || []).length >= PULL_LIMIT,
     }, 200, headers);
   },
 };

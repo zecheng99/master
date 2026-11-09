@@ -63,3 +63,19 @@ test('configuration validation protects keys and switching connection resets eve
 test('old connection replies cannot change new connection data or cursors',async()=>{
  const a=device(backend());const original=a.ctx.fetch;a.ctx.fetch=async(...args)=>{const res=await original(...args);a.saved.set('jp-sync-token','different-key-with-enough-characters');return res;};await a.sync();assert.equal(a.saved.get('jp-sync-at'),undefined);assert.equal(a.saved.get('jp-sync-snap'),undefined);assert.ok(a.timers.length);
 });
+
+test('CSV minute-rounded copies match original seconds while distinct starts are preserved',()=>{
+ const a=device(backend());
+ const original={id:'original',date:'2026-08-19',startTime:'21:43',duration:2433,topic:'日语'};
+ assert.equal(a.ctx.sameImportedSession(original,{...original,id:'csv',duration:2460}),true);
+ assert.equal(a.ctx.sameImportedSession(original,{...original,startTime:'21:44',duration:2460}),false);
+ assert.equal(a.ctx.sameImportedSession(original,{...original,duration:2520}),false);
+ assert.equal(a.ctx.sameImportedSession(original,{...original,duration:2440}),false);
+});
+
+test('deleted IDs cannot be resurrected by stale devices, even beyond their sync cursor',async()=>{
+ const env=backend(),a=device(env);const data={...a.read(),sessions:[session('removed')]};a.write(data);await a.sync();a.write({...a.read(),sessions:[]});await a.sync();
+ const response=await worker.fetch(new Request('https://sync.test/sync',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json',Origin:'https://zecheng99.github.io'},body:JSON.stringify({since:Date.now()+10000,sessions:[{id:'removed',data:JSON.stringify(session('removed'))}],settings:null})}),env);
+ const out=await response.json();assert.ok(out.sessions.some(r=>r.id==='removed'&&r.deleted===1));
+ const b=device(env);await b.sync();assert.deepEqual(b.read().sessions,[]);
+});

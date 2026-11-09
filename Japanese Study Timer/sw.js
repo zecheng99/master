@@ -1,5 +1,5 @@
 const PREFIX = 'jp-study-';
-const CACHE = PREFIX + 'v9';
+const CACHE = PREFIX + 'v10';
 const BASE = new URL('./', self.location.href).pathname;
 const ASSETS = [BASE, ...['index.html', 'manifest.json', 'apple-touch-icon.png', 'Icon%201024.png'].map(path => BASE + path), new URL('../shared/cloud-sync-ui.js', self.location.href).pathname];
 

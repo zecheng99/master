@@ -2053,7 +2053,7 @@ function importCSV(event) {
       const [, , startTime, durVal, topicRaw] = match;
       const topic = topicRaw.replace(/^"|"$/g, '').replace(/""/g, '"');
       const duration = isMinutes ? parseInt(durVal) * 60 : parseInt(durVal);
-      if (!data.sessions.some(s => s.date === date && s.duration === duration && s.topic === topic)) {
+      if (!data.sessions.some(s => sameImportedSession(s, { date, startTime, duration, topic }))) {
         data.sessions.push({
           id: String(Date.now() + Math.random()),
           date,
@@ -2121,6 +2121,12 @@ function hashStr(s) {
 // 极老的数据可能没有 id。按内容算一个：同一条在两台设备上算出来一样，不会同步成两条
 function sessionId(s) {
   return s.id || ('x' + hashStr([s.date, s.startTime, s.duration, s.topic].join('|')));
+}
+
+// CSV exports round seconds to minutes. Match that copy without merging distinct starts.
+function sameImportedSession(a, b) {
+  if (a.date !== b.date || (a.startTime || '') !== (b.startTime || '') || (a.topic || '') !== (b.topic || '')) return false;
+  return a.duration === b.duration || ((a.duration % 60 === 0 || b.duration % 60 === 0) && Math.round(a.duration / 60) === Math.round(b.duration / 60));
 }
 
 // 跟上次同步后的快照比，算出「改过的」和「被删的」，
