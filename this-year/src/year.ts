@@ -21,6 +21,14 @@ export type Entry = { id: string; wish_id: string; day: string; body: string; ph
 
 export const CATEGORIES = ['旅行与户外', '学习与成长', '运动与健康', '日常生活'] as const;
 export type Category = typeof CATEGORIES[number];
+// Stored category values remain stable for existing records and backups.
+const CATEGORY_LABELS: Record<Category,string> = {
+ '旅行与户外': '出去走走',
+ '学习与成长': '学习与成长',
+ '运动与健康': '运动与健康',
+ '日常生活': '做个实验',
+};
+export function categoryLabel(category: Category) { return CATEGORY_LABELS[category]; }
 export const MAX_PINNED = 7;
 export function inferCategory(title: string): Category {
  if (/去|游|公园|旅行|徒步/.test(title)) return '旅行与户外';
