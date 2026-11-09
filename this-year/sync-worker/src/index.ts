@@ -1,10 +1,11 @@
-import { seedTitles, todayInSingapore } from '../../src/year';
+import { seedTitles, todayInSingapore, CATEGORIES, MAX_PINNED, inferCategory } from '../../src/year';
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 const fail = (status: number, message: string): never => { throw new HttpError(status, message); };
 const uid = (v: unknown) => typeof v === 'string' && /^[\w-]{1,100}$/.test(v) ? v : fail(400, '无效的记录编号');
 const str = (v: unknown, max: number, empty = false) => typeof v === 'string' && v.length <= max && (empty || v.trim()) ? v.trim() : fail(400, '请填写有效内容');
 const date = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v ? v : fail(400, '日期格式有误');
 const integer = (v: unknown, min: number, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : fail(400, '次数超出范围');
+const category = (v: unknown) => typeof v === 'string' && CATEGORIES.includes(v as typeof CATEGORIES[number]) ? v : fail(400, '请选择有效的分类');
 const json = (v: unknown, status = 200) => Response.json(v, { status, headers: { 'Cache-Control': 'no-store' } });
 async function handle(req: Request, env: Env) {
  try {
@@ -23,7 +24,7 @@ async function handle(req: Request, env: Env) {
   if (kind === 'state' && req.method === 'GET') {
    await db!.batch([
     q('INSERT OR IGNORE INTO owners(id) VALUES(?)', owner),
-    ...seedTitles.map((title, i) => q('INSERT INTO wishes(id,owner,title,target,position) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM owners WHERE id=? AND initialized=0)', crypto.randomUUID(), owner, title, i === 7 ? 30 : null, i, owner)),
+    ...seedTitles.map((title, i) => q('INSERT INTO wishes(id,owner,title,target,category,position) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM owners WHERE id=? AND initialized=0)', crypto.randomUUID(), owner, title, i === 6 ? 15 : i === 7 ? 30 : null, inferCategory(title), i, owner)),
     q('UPDATE owners SET initialized=1 WHERE id=?', owner)
    ]);
    const [w,e,p] = await db!.batch<Record<string,unknown>>([q('SELECT * FROM wishes WHERE owner=? ORDER BY position,id',owner),q('SELECT * FROM entries WHERE owner=? ORDER BY day DESC,id DESC',owner),q('SELECT id,entry_id FROM photos WHERE owner=?',owner)]);
@@ -32,10 +33,22 @@ async function handle(req: Request, env: Env) {
   if (kind === 'wishes' && !rawId && req.method === 'POST') {
    const b = await req.json() as Record<string,unknown>; const id = uid(b.id);
    const existing = await q('SELECT owner FROM wishes WHERE id=?',id).first<{owner:string}>(); if(existing) { if(existing.owner!==owner) fail(409,'心愿编号已存在'); return json({id}); }
-   await q('INSERT INTO wishes(id,owner,title,target,position) VALUES(?,?,?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM wishes WHERE owner=?))', id, owner, str(b.title,200), b.target == null ? null : integer(b.target,1,100000), owner).run(); return json({id},201);
+   const title = str(b.title,200);
+   await q('INSERT INTO wishes(id,owner,title,target,category,position) VALUES(?,?,?,?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM wishes WHERE owner=?))', id, owner, title, b.target == null ? null : integer(b.target,1,100000), 'category' in b ? category(b.category) : inferCategory(title), owner).run(); return json({id},201);
   }
   if (kind === 'wishes' && rawId) {
    const id = uid(rawId); const w = await wish(id);
+   if (req.method === 'PATCH' && action === 'pin') {
+    const b = await req.json() as {pinned: unknown};
+    if(typeof b.pinned !== 'boolean') fail(400,'置顶状态格式有误');
+    if(!b.pinned) { await q('UPDATE wishes SET pinned=0 WHERE id=? AND owner=?',id,owner).run(); return json({ok:true}); }
+    if(Number(w.completed)) fail(409,'已完成的心愿不需要置顶');
+    if(w.target && Number(w.progress)>0) fail(409,'已开始的次数型心愿会自动出现在首页“进行中”');
+    // The count guard and write are one statement, so concurrent devices cannot exceed seven.
+    const r = await q('UPDATE wishes SET pinned=1 WHERE id=? AND owner=? AND completed=0 AND (target IS NULL OR progress=0) AND (pinned=1 OR (SELECT COUNT(*) FROM wishes WHERE owner=? AND pinned=1)<?)',id,owner,owner,MAX_PINNED).run();
+    if(!r.meta.changes) fail(409,'最多置顶 7 个心愿，请先取消一个，或刷新查看最新状态');
+    return json({ok:true});
+   }
    if (req.method === 'PATCH' && action === 'move') {
     const b = await req.json() as {direction: string}; if (!['up','down'].includes(b.direction)) fail(400,'无效的排序方向');
     const all = (await q('SELECT id FROM wishes WHERE owner=? ORDER BY position,id',owner).all<{id:string}>()).results;
@@ -46,13 +59,16 @@ async function handle(req: Request, env: Env) {
    if (req.method === 'PATCH' && !action) {
     const b = await req.json() as Record<string,unknown>;
     const title = 'title' in b ? str(b.title,200) : String(w.title);
+    const nextCategory = 'category' in b ? category(b.category) : w.category as string|null ?? inferCategory(title);
     const target = 'target' in b ? b.target == null ? null : integer(b.target,1,100000) : w.target as number|null;
     let progress = 'progress' in b ? integer(b.progress,0,100000) : Number(w.progress);
     if (target) progress = Math.min(target,progress);
     let completed = target ? Number(progress>=target) : Number(w.completed);
     if ('completed' in b) { if (typeof b.completed !== 'boolean') fail(400,'完成状态有误'); completed = Number(b.completed); if(target) progress=completed?target:Math.min(progress,target-1); }
     const completedOn = completed ? ('completed_on' in b ? date(b.completed_on) : w.completed_on as string|null ?? todayInSingapore()) : null;
-    await q('UPDATE wishes SET title=?,target=?,progress=?,completed=?,completed_on=? WHERE id=? AND owner=?', title,target,progress,completed,completedOn,id,owner).run(); return json({ok:true});
+    const r = await q('UPDATE wishes SET title=?,target=?,progress=?,completed=?,completed_on=?,category=?,pinned=CASE WHEN ?=1 OR (? IS NOT NULL AND ?>0) THEN 0 ELSE pinned END WHERE id=? AND owner=?', title,target,progress,completed,completedOn,nextCategory,completed,target,progress,id,owner).run();
+    if(!r.meta.changes) fail(404,'找不到这个心愿');
+    return json({ok:true});
    }
    if(req.method==='DELETE' && !action) {
     await erasePhotos('SELECT p.object_key FROM photos p JOIN entries e ON e.id=p.entry_id WHERE e.wish_id=? AND p.owner=?',id);
