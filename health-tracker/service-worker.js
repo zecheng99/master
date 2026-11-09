@@ -1,5 +1,5 @@
 const PREFIX='profast-';
-const CACHE_NAME=PREFIX+'v11';
+const CACHE_NAME=PREFIX+'v12';
 const BASE=new URL('./',self.location.href).pathname;
 const ASSETS=[BASE,...['index.html','manifest.json','icon-192.png','icon-512.png','sync-core.js','cloud-sync.js'].map(path=>BASE+path),new URL('../shared/cloud-sync-ui.js',self.location.href).pathname];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});

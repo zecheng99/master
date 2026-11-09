@@ -907,16 +907,6 @@ function renderProtein() {
   html += proteinWeekHtml();
   html += proteinChartHtml();
 
-  html += `
-    <div class="card-label" style="margin-top:8px">数据管理</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-outline" style="flex:1" onclick="exportJSON()">导出 JSON</button>
-      <label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">
-        导入 JSON
-        <input type="file" accept=".json" style="display:none" onchange="importJSON(event)">
-      </label>
-    </div>`;
-
   document.getElementById('protein-panel').innerHTML = html;
   const sc = document.getElementById('p-chart-scroll');
   if (sc) sc.scrollLeft = sc.scrollWidth;
@@ -1351,15 +1341,6 @@ function renderFasting() {
   html += fastChartHtml(mode);
 
   html += `
-    <div class="card-label">数据管理</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-outline" style="flex:1" onclick="exportJSON()">导出 JSON</button>
-      <label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">
-        导入 JSON
-        <input type="file" accept=".json" style="display:none" onchange="importJSON(event)">
-      </label>
-    </div>
-
     <div class="card-label" style="margin-top:4px">历史记录 <span style="font-size:11px;color:var(--label3)">(点击可编辑)</span></div>
     <div class="card">`;
 
