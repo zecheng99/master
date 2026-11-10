@@ -12,3 +12,6 @@ aside/sync-worker/
 
 # 本地 VS Code 配置：settings.json 里是这台机器的 anaconda 绝对路径，换机器无效
 .vscode/
+
+# 本地开发约定
+/AGENTS.md
